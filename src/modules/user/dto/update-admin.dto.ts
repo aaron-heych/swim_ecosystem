@@ -1,4 +1,6 @@
 import {
+  ArrayNotEmpty,
+  IsArray,
   IsEmail,
   IsInt,
   IsNotEmpty,
@@ -11,7 +13,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-/** 更新管理员基本信息（不含密码 / 角色 / 状态） */
+/** 更新管理员基本信息及角色（不含密码 / 状态） */
 export class UpdateAdminDto {
   @IsOptional()
   @IsString()
@@ -33,4 +35,11 @@ export class UpdateAdminDto {
   @IsEmail()
   @Length(0, 128)
   email?: string;
+
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Type(() => Number)
+  roleIds: number[];
 }

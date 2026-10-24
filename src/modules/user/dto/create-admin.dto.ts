@@ -1,4 +1,5 @@
 import {
+  ArrayNotEmpty,
   IsArray,
   IsEmail,
   IsInt,
@@ -18,11 +19,6 @@ export class CreateAdminDto {
   @IsNotEmpty()
   @Length(3, 64)
   username: string;
-
-  @IsString()
-  @IsNotEmpty()
-  @Length(6, 64)
-  password: string;
 
   @IsString()
   @IsNotEmpty()
@@ -52,6 +48,7 @@ export class CreateAdminDto {
   status?: number;
 
   @IsArray()
+  @ArrayNotEmpty()
   @IsInt({ each: true })
   @Min(1, { each: true })
   @Type(() => Number)

@@ -39,6 +39,7 @@
     <el-table v-loading="loading" :data="list" border stripe>
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="eventTitle" label="赛事" min-width="160" show-overflow-tooltip />
+      <el-table-column prop="userDisplayName" label="报名账号" min-width="120" />
       <el-table-column prop="groupName" label="组别" min-width="120" show-overflow-tooltip />
       <el-table-column prop="playerName" label="选手姓名" min-width="120" />
       <el-table-column prop="phone" label="手机" min-width="130" />

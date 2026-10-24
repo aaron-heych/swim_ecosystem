@@ -107,11 +107,11 @@ export class Association extends BaseEntity {
   creatorId: number;
 
   // ---- 关联 ----
-  @ManyToOne(() => AdminUser, { nullable: true })
+  @ManyToOne(() => AdminUser, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'auditor_id' })
   auditor: AdminUser | null;
 
-  @ManyToOne(() => User, { nullable: true })
+  @ManyToOne(() => User, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'creator_id' })
   creator: User | null;
 
@@ -192,15 +192,15 @@ export class AssociationMember extends BaseEntity {
   insuranceEndAt: Date;
 
   // ---- 关联 ----
-  @ManyToOne(() => Association, (a) => a.members)
+  @ManyToOne(() => Association, (a) => a.members, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'association_id' })
   association: Association;
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @ManyToOne(() => User, { nullable: true })
+  @ManyToOne(() => User, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'reviewer_id' })
   reviewer: User | null;
 }

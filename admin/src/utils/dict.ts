@@ -19,6 +19,11 @@ export const ENABLE_STATUS: Record<number, DictItem> = {
   1: { label: '启用', type: 'success' },
 };
 
+export const USER_STATUS: Record<number, DictItem> = {
+  ...ENABLE_STATUS,
+  2: { label: '已删除', type: 'info' },
+};
+
 /** 上下架状态：0下架 1上架 */
 export const SHELF_STATUS: Record<number, DictItem> = {
   0: { label: '下架', type: 'info' },

@@ -1,9 +1,12 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
+  DefaultValuePipe,
   Get,
   Param,
+  ParseIntPipe,
   Post,
   Put,
   Query,
@@ -44,20 +47,33 @@ export class CoachAdminController {
   @ApiOperation({ summary: '教练分页列表' })
   @Get('list')
   async list(
-    @Query('page') page = 1,
-    @Query('pageSize') pageSize = 20,
+    @Query('page', new DefaultValuePipe('1'), ParseIntPipe) page = '1',
+    @Query('pageSize', new DefaultValuePipe('20'), ParseIntPipe) pageSize = '20',
     @Query('keyword') keyword?: string,
-    @Query('venueId') venueId?: number,
-    @Query('auditStatus') auditStatus?: number,
-    @Query('status') status?: number,
+    @Query('venueId', new ParseIntPipe({ optional: true }))
+    venueId?: string,
+    @Query('auditStatus', new ParseIntPipe({ optional: true }))
+    auditStatus?: string,
+    @Query('status', new ParseIntPipe({ optional: true })) status?: string,
   ) {
+    const pageNumber = Number(page);
+    const pageSizeNumber = Number(pageSize);
+    if (
+      !Number.isInteger(pageNumber) ||
+      !Number.isInteger(pageSizeNumber) ||
+      pageNumber < 1 ||
+      pageSizeNumber < 1 ||
+      pageSizeNumber > 100
+    ) {
+      throw new BadRequestException('page must be >= 1 and pageSize must be 1-100');
+    }
     return this.coachService.listAdmin(
-      Number(page) || 1,
-      Number(pageSize) || 20,
+      pageNumber,
+      pageSizeNumber,
       keyword,
-      venueId ? Number(venueId) : undefined,
-      auditStatus !== undefined ? Number(auditStatus) : undefined,
-      status !== undefined ? Number(status) : undefined,
+      venueId === undefined ? undefined : Number(venueId),
+      auditStatus === undefined ? undefined : Number(auditStatus),
+      status === undefined ? undefined : Number(status),
     );
   }
 

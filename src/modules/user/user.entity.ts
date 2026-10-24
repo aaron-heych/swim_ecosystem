@@ -26,6 +26,10 @@ import { BaseEntity, BaseTimestampEntity, BaseCreatedEntity } from '../../common
 @Index('idx_users_city', ['province', 'city'])
 @Index('idx_users_status', ['status'])
 export class User extends BaseEntity {
+  displayName?: string;
+
+  isDeleted?: boolean;
+
   /** 小程序 openid */
   @Column({ length: 64, nullable: true })
   openid: string;
@@ -126,6 +130,10 @@ export class AdminUser extends BaseEntity {
   @Column({ type: 'tinyint', default: 1 })
   status: number;
 
+  /** 首次登录后必须修改初始密码 */
+  @Column({ type: 'tinyint', default: 0, name: 'need_change_password' })
+  needChangePassword: boolean;
+
   @Column({ type: 'datetime', nullable: true, name: 'last_login_at' })
   lastLoginAt: Date;
 
@@ -137,7 +145,7 @@ export class AdminUser extends BaseEntity {
   associationId: number;
 
   // ---- 关联 ----
-  @ManyToMany(() => Role, (r) => r.adminUsers)
+  @ManyToMany(() => Role, (r) => r.adminUsers, { createForeignKeyConstraints: false })
   @JoinTable({
     name: 'admin_user_roles',
     joinColumn: { name: 'admin_user_id', referencedColumnName: 'id' },
@@ -149,7 +157,7 @@ export class AdminUser extends BaseEntity {
 /* ============================= 角色 ============================= */
 @Entity('roles')
 @Index('uk_roles_code', ['code'], { unique: true })
-export class Role extends BaseTimestampEntity {
+export class Role extends BaseEntity {
   /** 角色编码：super_admin / operator / association_admin / merchant */
   @Column({ length: 64 })
   code: string;
@@ -168,10 +176,10 @@ export class Role extends BaseTimestampEntity {
   status: number;
 
   // ---- 关联 ----
-  @ManyToMany(() => AdminUser, (a) => a.roles)
+  @ManyToMany(() => AdminUser, (a) => a.roles, { createForeignKeyConstraints: false })
   adminUsers: AdminUser[];
 
-  @ManyToMany(() => Permission, (p) => p.roles)
+  @ManyToMany(() => Permission, (p) => p.roles, { createForeignKeyConstraints: false })
   @JoinTable({
     name: 'role_permissions',
     joinColumn: { name: 'role_id', referencedColumnName: 'id' },
@@ -219,14 +227,17 @@ export class Permission extends BaseTimestampEntity {
   status: number;
 
   // ---- 关联 ----
-  @ManyToOne(() => Permission, (p) => p.children, { nullable: true })
+  @ManyToOne(() => Permission, (p) => p.children, {
+    nullable: true,
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'parent_id' })
   parent: Permission | null;
 
   @OneToMany(() => Permission, (p) => p.parent)
   children: Permission[];
 
-  @ManyToMany(() => Role, (r) => r.permissions)
+  @ManyToMany(() => Role, (r) => r.permissions, { createForeignKeyConstraints: false })
   roles: Role[];
 }
 
@@ -242,11 +253,11 @@ export class RolePermission {
   @CreateDateColumn()
   createdAt: Date;
 
-  @ManyToOne(() => Role, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Role, { onDelete: 'CASCADE', createForeignKeyConstraints: false })
   @JoinColumn({ name: 'role_id' })
   role: Role;
 
-  @ManyToOne(() => Permission, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Permission, { onDelete: 'CASCADE', createForeignKeyConstraints: false })
   @JoinColumn({ name: 'permission_id' })
   permission: Permission;
 }
@@ -263,11 +274,11 @@ export class AdminUserRole {
   @CreateDateColumn()
   createdAt: Date;
 
-  @ManyToOne(() => AdminUser, { onDelete: 'CASCADE' })
+  @ManyToOne(() => AdminUser, { onDelete: 'CASCADE', createForeignKeyConstraints: false })
   @JoinColumn({ name: 'admin_user_id' })
   adminUser: AdminUser;
 
-  @ManyToOne(() => Role, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Role, { onDelete: 'CASCADE', createForeignKeyConstraints: false })
   @JoinColumn({ name: 'role_id' })
   role: Role;
 }

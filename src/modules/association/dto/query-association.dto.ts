@@ -1,4 +1,10 @@
-import { IsIn, IsInt, IsOptional, IsString } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 
@@ -38,4 +44,13 @@ export class QueryAssociationDto extends PaginationDto {
   @IsString()
   @IsOptional()
   contactPhone?: string;
+
+  /** 协会成立日期范围（含起止日期） */
+  @IsDateString()
+  @IsOptional()
+  establishStart?: string;
+
+  @IsDateString()
+  @IsOptional()
+  establishEnd?: string;
 }

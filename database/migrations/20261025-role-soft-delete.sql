@@ -1,0 +1,2 @@
+ALTER TABLE `roles`
+  ADD COLUMN `deleted_at` DATETIME DEFAULT NULL COMMENT '软删除时间';

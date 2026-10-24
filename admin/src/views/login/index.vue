@@ -96,14 +96,25 @@ async function onSubmit() {
         username: admin.username,
         realName: admin.realName,
         avatar: admin.avatarUrl || admin.avatar,
-        roles: (admin.roleCodes || []).map((c: string, i: number) => ({
-          id: i + 1,
-          name: c,
-          code: c,
-        })),
+        roles: (admin.roleCodes || admin.roles || []).map(
+          (role: string | { id?: number; name?: string; code?: string }, i: number) => {
+            const code = typeof role === 'string' ? role : role.code || '';
+            return {
+              id: typeof role === 'string' ? i + 1 : role.id || i + 1,
+              name: typeof role === 'string' ? role : role.name || code,
+              code,
+            };
+          },
+        ),
+        roleCodes: (admin.roleCodes || []).map((role: string) => role),
         associationId: admin.associationId ?? null,
+        needChangePassword: admin.needChangePassword ?? false,
       });
       ElMessage.success('登录成功');
+      if (admin.needChangePassword) {
+        router.replace('/account/change-password');
+        return;
+      }
       const redirect = (route.query.redirect as string) || '/dashboard';
       router.replace(redirect);
     } catch (e) {

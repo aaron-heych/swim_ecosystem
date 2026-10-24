@@ -134,7 +134,7 @@ export class Venue extends BaseEntity {
   creatorId: number;
 
   // ---- 关联 ----
-  @ManyToOne(() => AdminUser, { nullable: true })
+  @ManyToOne(() => AdminUser, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'creator_id' })
   creator: AdminUser | null;
 
@@ -220,11 +220,14 @@ export class Coach extends BaseEntity {
   sort: number;
 
   // ---- 关联 ----
-  @ManyToOne(() => User, { nullable: true })
+  @ManyToOne(() => User, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'user_id' })
   user: User | null;
 
-  @ManyToOne(() => Venue, (v) => v.coaches, { nullable: true })
+  @ManyToOne(() => Venue, (v) => v.coaches, {
+    nullable: true,
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'venue_id' })
   venue: Venue | null;
 
@@ -274,7 +277,10 @@ export class CoachCourse extends BaseTimestampEntity {
   status: number;
 
   // ---- 关联 ----
-  @ManyToOne(() => Coach, (c) => c.courses, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Coach, (c) => c.courses, {
+    onDelete: 'CASCADE',
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'coach_id' })
   coach: Coach;
 
@@ -315,15 +321,18 @@ export class CoachSchedule extends BaseTimestampEntity {
   status: number;
 
   // ---- 关联 ----
-  @ManyToOne(() => Coach, (c) => c.schedules)
+  @ManyToOne(() => Coach, (c) => c.schedules, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'coach_id' })
   coach: Coach;
 
-  @ManyToOne(() => CoachCourse, (c) => c.schedules, { nullable: true })
+  @ManyToOne(() => CoachCourse, (c) => c.schedules, {
+    nullable: true,
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'course_id' })
   course: CoachCourse | null;
 
-  @ManyToOne(() => Venue, { nullable: true })
+  @ManyToOne(() => Venue, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'venue_id' })
   venue: Venue | null;
 }
@@ -398,23 +407,26 @@ export class CoachAppointment extends BaseTimestampEntity {
   remark: string;
 
   // ---- 关联 ----
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @ManyToOne(() => Coach, (c) => c.appointments)
+  @ManyToOne(() => Coach, (c) => c.appointments, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'coach_id' })
   coach: Coach;
 
-  @ManyToOne(() => CoachCourse, (c) => c.appointments, { nullable: true })
+  @ManyToOne(() => CoachCourse, (c) => c.appointments, {
+    nullable: true,
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'course_id' })
   course: CoachCourse | null;
 
-  @ManyToOne(() => CoachSchedule, { nullable: true })
+  @ManyToOne(() => CoachSchedule, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'schedule_id' })
   schedule: CoachSchedule | null;
 
-  @ManyToOne(() => Venue, { nullable: true })
+  @ManyToOne(() => Venue, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'venue_id' })
   venue: Venue | null;
 
@@ -469,15 +481,15 @@ export class CoachReview {
   createdAt: Date;
 
   // ---- 关联 ----
-  @ManyToOne(() => CoachAppointment, (a) => a.reviews)
+  @ManyToOne(() => CoachAppointment, (a) => a.reviews, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'appointment_id' })
   appointment: CoachAppointment;
 
-  @ManyToOne(() => Coach)
+  @ManyToOne(() => Coach, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'coach_id' })
   coach: Coach;
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'user_id' })
   user: User;
 }

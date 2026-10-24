@@ -217,10 +217,22 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: '系统设置', icon: 'Setting', roles: ['super_admin', 'operator'] },
     children: [
       {
+        path: 'operation-log',
+        name: 'SystemOperationLog',
+        component: () => import('@/views/system/operation-log.vue'),
+        meta: { title: '操作日志' },
+      },
+      {
         path: 'access',
         name: 'SystemAccess',
         component: () => import('@/views/system/access.vue'),
         meta: { title: '访问统计' },
+      },
+      {
+        path: 'regions',
+        name: 'SystemRegions',
+        component: () => import('@/views/system/regions.vue'),
+        meta: { title: '行政区管理', roles: ['super_admin'] },
       },
       {
         path: 'banner',
@@ -240,11 +252,17 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/views/system/config.vue'),
         meta: { title: '系统配置' },
       },
+    ],
+  },
+  {
+    path: '/account',
+    component: Layout,
+    children: [
       {
-        path: 'operation-log',
-        name: 'SystemOperationLog',
-        component: () => import('@/views/system/operation-log.vue'),
-        meta: { title: '操作日志' },
+        path: 'change-password',
+        name: 'AdminChangePassword',
+        component: () => import('@/views/account/change-password.vue'),
+        meta: { title: '修改密码', hidden: true },
       },
     ],
   },
@@ -275,6 +293,12 @@ router.beforeEach((to, _from, next) => {
   }
   if (!userStore.token) {
     return next(`/login?redirect=${encodeURIComponent(to.fullPath)}`);
+  }
+  if (
+    userStore.userInfo.needChangePassword &&
+    to.name !== 'AdminChangePassword'
+  ) {
+    return next({ name: 'AdminChangePassword' });
   }
   next();
 });

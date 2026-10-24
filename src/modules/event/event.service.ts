@@ -396,7 +396,7 @@ export class EventService {
       );
     }
     qb.leftJoinAndSelect('e.source', 'source')
-      .orderBy('e.created_at', 'DESC')
+      .orderBy('e.createdAt', 'DESC')
       .skip((page - 1) * pageSize)
       .take(pageSize);
     const [list, total] = await qb.getManyAndCount();
@@ -528,7 +528,7 @@ export class EventService {
       payStatus,
       orderNo,
     } = query;
-    const qb = this.regRepo.createQueryBuilder('r');
+    const qb = this.regRepo.createQueryBuilder('r').withDeleted();
     if (eventId) qb.andWhere('r.event_id = :eventId', { eventId });
     if (userId) qb.andWhere('r.user_id = :userId', { userId });
     if (status !== undefined && status !== null) {
@@ -559,6 +559,7 @@ export class EventService {
     const reg = await this.regRepo.findOne({
       where: { id } as any,
       relations: ['event', 'items', 'user'],
+      withDeleted: true,
     });
     if (!reg) throw new NotFoundException('报名单不存在');
     return this.maskRegistration(reg);
@@ -652,6 +653,14 @@ export class EventService {
 
   /** 报名单脱敏（手机/身份证） */
   private maskRegistration(reg: EventRegistration): EventRegistration {
+    if (reg.user) {
+      reg.user.isDeleted = !!reg.user.deletedAt;
+      reg.user.displayName = reg.user.deletedAt
+        ? '已注销用户'
+        : reg.user.realName || reg.user.nickname || '用户';
+      (reg as EventRegistration & { userDisplayName?: string }).userDisplayName =
+        reg.user.displayName;
+    }
     if (reg.contactPhone) {
       (reg as any).contactPhone = maskPhone(reg.contactPhone);
     }

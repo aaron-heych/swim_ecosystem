@@ -30,9 +30,15 @@ import { UpdateAdminDto } from './dto/update-admin.dto';
 import { ResetAdminPasswordDto } from './dto/reset-admin-password.dto';
 import { UpdateAdminRolesDto } from './dto/update-admin-roles.dto';
 import { UpdateAdminUserStatusDto } from './dto/update-admin-status.dto';
+import { ChangeAdminPasswordDto } from './dto/change-admin-password.dto';
+import {
+  CurrentUser,
+  JwtPayload,
+} from '../../common/decorators/current-user.decorator';
 import { AdminJwtAuthGuard } from '../../common/guards/admin-jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { Public } from '../../common/decorators/public.decorator';
+import { AllowDuringPasswordChange } from '../../common/decorators/allow-during-password-change.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 
@@ -57,6 +63,17 @@ export class UserAdminController {
     return this.userService.adminLogin(dto, this.clientIp(req));
   }
 
+  /** 管理员修改自己的密码（首次登录强制修改） */
+  @Put('user/change-password')
+  @AllowDuringPasswordChange()
+  @ApiOperation({ summary: '管理员修改自己的密码' })
+  changeAdminPassword(
+    @Body() dto: ChangeAdminPasswordDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.userService.changeAdminPassword(Number(user.adminId), dto);
+  }
+
   /* ============== C 端用户管理 ============== */
 
   /** 2. C 端用户分页列表 */
@@ -76,6 +93,23 @@ export class UserAdminController {
     @Body() dto: UpdateUserStatusDto,
   ) {
     return this.rbacService.updateUserStatus(Number(id), dto);
+  }
+
+  /** 管理员逻辑删除 C 端用户 */
+  @Delete('user/:id')
+  @RequirePermissions('user:status')
+  @ApiOperation({ summary: '逻辑删除 C 端用户' })
+  deleteUser(
+    @Param('id') id: number,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ) {
+    return this.rbacService.deleteUser(
+      Number(id),
+      Number(user.adminId),
+      user.username ?? '',
+      this.clientIp(req),
+    );
   }
 
   /* ===================== RBAC：权限 ===================== */
@@ -170,8 +204,17 @@ export class UserAdminController {
   @ApiTags('角色权限-管理后台')
   @ApiOperation({ summary: '删除角色' })
   @ApiParam({ name: 'id', description: '角色ID' })
-  deleteRole(@Param('id') id: number) {
-    return this.rbacService.deleteRole(Number(id));
+  deleteRole(
+    @Param('id') id: number,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ) {
+    return this.rbacService.deleteRole(
+      Number(id),
+      Number(user.adminId),
+      user.username ?? '',
+      this.clientIp(req),
+    );
   }
 
   /* ===================== RBAC：管理员 ===================== */
@@ -190,8 +233,17 @@ export class UserAdminController {
   @RequirePermissions('rbac:admin:create')
   @ApiTags('角色权限-管理后台')
   @ApiOperation({ summary: '创建管理员' })
-  createAdmin(@Body() dto: CreateAdminDto) {
-    return this.rbacService.createAdmin(dto);
+  createAdmin(
+    @Body() dto: CreateAdminDto,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ) {
+    return this.rbacService.createAdmin(
+      dto,
+      Number(user.adminId),
+      user.username ?? '',
+      this.clientIp(req),
+    );
   }
 
   /** 12. 更新管理员基本信息 */
@@ -200,8 +252,19 @@ export class UserAdminController {
   @ApiTags('角色权限-管理后台')
   @ApiOperation({ summary: '更新管理员基本信息' })
   @ApiParam({ name: 'id', description: '管理员ID' })
-  updateAdmin(@Param('id') id: number, @Body() dto: UpdateAdminDto) {
-    return this.rbacService.updateAdmin(Number(id), dto);
+  updateAdmin(
+    @Param('id') id: number,
+    @Body() dto: UpdateAdminDto,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ) {
+    return this.rbacService.updateAdmin(
+      Number(id),
+      dto,
+      Number(user.adminId),
+      user.username ?? '',
+      this.clientIp(req),
+    );
   }
 
   /** 13. 重置管理员密码 */
@@ -241,6 +304,25 @@ export class UserAdminController {
     @Body() dto: UpdateAdminUserStatusDto,
   ) {
     return this.rbacService.updateAdminStatus(Number(id), dto);
+  }
+
+  /** 16. 删除管理员 */
+  @Delete('rbac/admin/:id')
+  @RequirePermissions('rbac:admin:delete')
+  @ApiTags('角色权限-管理后台')
+  @ApiOperation({ summary: '删除管理员' })
+  @ApiParam({ name: 'id', description: '管理员ID' })
+  deleteAdmin(
+    @Param('id') id: number,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ) {
+    return this.rbacService.deleteAdmin(
+      Number(id),
+      Number(user.adminId),
+      user.username ?? '',
+      this.clientIp(req),
+    );
   }
 
   private clientIp(req: Request): string | undefined {

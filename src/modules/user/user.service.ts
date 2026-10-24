@@ -7,7 +7,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { User, AdminUser } from './user.entity';
@@ -23,6 +23,8 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { BindPhoneDto } from './dto/bind-phone.dto';
 import { BindIdCardDto } from './dto/bind-id-card.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
+import { ChangeAdminPasswordDto } from './dto/change-admin-password.dto';
+import { OperationLog } from '../system/system.entity';
 
 @Injectable()
 export class UserService {
@@ -33,6 +35,7 @@ export class UserService {
     private readonly adminUserRepo: Repository<AdminUser>,
     private readonly jwtService: JwtService,
     private readonly wxUtil: WxUtil,
+    private readonly dataSource: DataSource,
   ) {}
 
   /* ============================= C 端 ============================= */
@@ -134,12 +137,33 @@ export class UserService {
 
   /** 注销账号：软删除 + 禁用 */
   async deactivate(userId: number) {
-    const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (!user) throw new NotFoundException('用户不存在');
-    user.status = 0;
-    await this.userRepo.save(user);
-    await this.userRepo.softDelete(userId);
-    return { success: true };
+    return this.dataSource.transaction(async (manager) => {
+      const user = await manager.findOne(User, {
+        where: { id: userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!user) throw new NotFoundException('用户不存在');
+      await manager.update(User, userId, { status: 0 });
+      await manager.softDelete(User, userId);
+      await manager.save(
+        OperationLog,
+        manager.create(OperationLog, {
+          username: `user:${userId}`,
+          operatorRealName: user.realName ?? user.nickname ?? null,
+          module: 'user',
+          action: 'delete',
+          targetType: 'user',
+          targetId: userId,
+          targetName:
+            user.nickname ?? user.realName ?? `用户${userId}`,
+          requestMethod: 'POST',
+          requestUrl: '/api/user/deactivate',
+          params: JSON.stringify({ userId, nickname: user.nickname }),
+          status: 1,
+        }),
+      );
+      return { success: true };
+    });
   }
 
   /* ============================= 后台登录 ============================= */
@@ -161,7 +185,12 @@ export class UserService {
       throw new UnauthorizedException('用户名或密码错误');
     }
 
-    const roleCodes = (admin.roles ?? []).map((r) => r.code);
+    const roleCodes = (admin.roles ?? [])
+      .filter((role) => role.status === 1)
+      .map((role) => role.code);
+    if (roleCodes.length === 0) {
+      throw new ForbiddenException('管理员未分配有效角色，无法登录');
+    }
     const now = new Date();
     await this.adminUserRepo.update(admin.id, {
       lastLoginAt: now,
@@ -173,6 +202,7 @@ export class UserService {
       username: admin.username,
       roleCodes,
       associationId: admin.associationId ?? null,
+      needChangePassword: admin.needChangePassword,
       type: 'admin',
     });
     return {
@@ -184,6 +214,59 @@ export class UserService {
         avatarUrl: admin.avatarUrl,
         roleCodes,
         associationId: admin.associationId ?? null,
+        needChangePassword: admin.needChangePassword,
+      },
+    };
+  }
+
+  /** 管理员修改自己的密码 */
+  async changeAdminPassword(
+    adminId: number,
+    dto: ChangeAdminPasswordDto,
+  ) {
+    const admin = await this.adminUserRepo.findOne({
+      where: { id: adminId },
+      relations: ['roles'],
+    });
+    if (!admin) throw new NotFoundException('管理员不存在');
+    const currentPasswordMatches = await bcrypt.compare(
+      dto.currentPassword,
+      admin.passwordHash,
+    );
+    if (!currentPasswordMatches) {
+      throw new BadRequestException('当前密码不正确');
+    }
+    if (dto.currentPassword === dto.newPassword) {
+      throw new BadRequestException('新密码不能与当前密码相同');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    await this.adminUserRepo.update(admin.id, {
+      passwordHash,
+      needChangePassword: false,
+    });
+
+    const roleCodes = (admin.roles ?? [])
+      .filter((role) => role.status === 1)
+      .map((role) => role.code);
+    const token = await this.jwtService.signAsync({
+      adminId: admin.id,
+      username: admin.username,
+      roleCodes,
+      associationId: admin.associationId ?? null,
+      needChangePassword: false,
+      type: 'admin',
+    });
+    return {
+      token,
+      admin: {
+        id: admin.id,
+        username: admin.username,
+        realName: admin.realName,
+        avatarUrl: admin.avatarUrl,
+        roleCodes,
+        associationId: admin.associationId ?? null,
+        needChangePassword: false,
       },
     };
   }

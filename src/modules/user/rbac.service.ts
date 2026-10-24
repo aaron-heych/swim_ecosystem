@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, In } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
+import { randomInt } from 'crypto';
 import {
   User,
   AdminUser,
@@ -34,6 +35,7 @@ import { UpdateAdminDto } from './dto/update-admin.dto';
 import { ResetAdminPasswordDto } from './dto/reset-admin-password.dto';
 import { UpdateAdminRolesDto } from './dto/update-admin-roles.dto';
 import { UpdateAdminUserStatusDto } from './dto/update-admin-status.dto';
+import { OperationLog } from '../system/system.entity';
 
 @Injectable()
 export class RbacService {
@@ -58,13 +60,18 @@ export class RbacService {
   /** C 端用户分页列表（含 keyword 搜 nickname/phone + status 过滤） */
   async findUserList(dto: QueryUserDto): Promise<PaginatedResult<any>> {
     const qb = this.userRepo.createQueryBuilder('u');
+    if (dto.status === 2) {
+      qb.withDeleted().andWhere('u.deleted_at IS NOT NULL');
+    } else {
+      qb.andWhere('u.deleted_at IS NULL');
+    }
     if (dto.keyword) {
       qb.andWhere(
         '(u.nickname LIKE :kw OR u.phone LIKE :kw OR u.real_name LIKE :kw)',
         { kw: `%${dto.keyword}%` },
       );
     }
-    if (dto.status !== undefined && dto.status !== null) {
+    if (dto.status !== undefined && dto.status !== null && dto.status !== 2) {
       qb.andWhere('u.status = :status', { status: dto.status });
     }
     qb.orderBy('u.id', 'DESC');
@@ -85,6 +92,42 @@ export class RbacService {
     user.status = dto.status;
     await this.userRepo.save(user);
     return { id, status: user.status };
+  }
+
+  async deleteUser(id: number, operatorId: number, username: string, ip?: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const user = await manager.findOne(User, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!user) throw new NotFoundException('用户不存在或已删除');
+      const operator = await manager.findOne(AdminUser, {
+        where: { id: operatorId },
+        select: ['id', 'realName'],
+      });
+
+      await manager.update(User, id, { status: 0 });
+      await manager.softDelete(User, id);
+      await manager.save(
+        OperationLog,
+        manager.create(OperationLog, {
+          adminId: operatorId,
+          username,
+          operatorRealName: operator?.realName ?? null,
+          module: 'user',
+          action: 'delete',
+          targetType: 'user',
+          targetId: id,
+          targetName: user.nickname ?? user.realName ?? `用户${id}`,
+          requestMethod: 'DELETE',
+          requestUrl: `/api/admin/user/${id}`,
+          params: JSON.stringify({ userId: id, nickname: user.nickname }),
+          ip: ip ?? null,
+          status: 1,
+        }),
+      );
+      return { success: true };
+    });
   }
 
   /* ============================= 权限 ============================= */
@@ -184,10 +227,12 @@ export class RbacService {
 
   /** 创建角色 */
   async createRole(dto: CreateRoleDto) {
-    const exists = await this.roleRepo.findOne({
-      where: { code: dto.code },
-      select: ['id'],
-    });
+    const exists = await this.roleRepo
+      .createQueryBuilder('role')
+      .withDeleted()
+      .select('role.id')
+      .where('role.code = :code', { code: dto.code })
+      .getOne();
     if (exists) throw new ConflictException('角色编码已存在');
 
     const role = this.roleRepo.create({
@@ -230,16 +275,52 @@ export class RbacService {
   }
 
   /** 删除角色 */
-  async deleteRole(id: number) {
-    const role = await this.roleRepo.findOne({ where: { id } });
-    if (!role) throw new NotFoundException('角色不存在');
-    if (role.code === 'super_admin') {
-      throw new BadRequestException('内置超级管理员角色不可删除');
-    }
+  async deleteRole(
+    id: number,
+    operatorId: number,
+    username = '',
+    ip?: string,
+  ) {
     await this.dataSource.transaction(async (manager) => {
-      await manager.delete(RolePermission, { roleId: id });
-      await manager.delete(AdminUserRole, { roleId: id });
-      await manager.delete(Role, { id });
+      const role = await manager.findOne(Role, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!role) throw new NotFoundException('角色不存在或已删除');
+      if (role.code === 'super_admin') {
+        throw new BadRequestException('内置超级管理员角色不可删除');
+      }
+      const boundAdminCount = await manager.count(AdminUserRole, {
+        where: { roleId: id },
+      });
+      if (boundAdminCount > 0) {
+        throw new BadRequestException(
+          '该角色下仍有绑定用户，请先解除绑定或禁用角色。',
+        );
+      }
+      const operator = await manager.findOne(AdminUser, {
+        where: { id: operatorId },
+        select: ['id', 'realName'],
+      });
+      await manager.softDelete(Role, id);
+      await manager.save(
+        OperationLog,
+        manager.create(OperationLog, {
+          adminId: operatorId,
+          username,
+          operatorRealName: operator?.realName ?? null,
+          module: 'rbac',
+          action: 'delete',
+          targetType: 'role',
+          targetId: id,
+          targetName: role.name,
+          requestMethod: 'DELETE',
+          requestUrl: `/api/admin/rbac/role/${id}`,
+          params: JSON.stringify({ roleId: id, code: role.code, name: role.name }),
+          ip: ip ?? null,
+          status: 1,
+        }),
+      );
     });
     return { success: true };
   }
@@ -270,24 +351,30 @@ export class RbacService {
   }
 
   /** 创建管理员 */
-  async createAdmin(dto: CreateAdminDto) {
+  async createAdmin(
+    dto: CreateAdminDto,
+    operatorId: number,
+    operatorUsername = '',
+    ip?: string,
+  ) {
     const exists = await this.adminUserRepo.findOne({
       where: { username: dto.username },
       select: ['id'],
     });
     if (exists) throw new ConflictException('用户名已存在');
 
-    // 校验角色
-    if (dto.roleIds?.length) {
-      const roleCount = await this.roleRepo.count({
-        where: { id: In(dto.roleIds) },
-      });
-      if (roleCount !== dto.roleIds.length) {
-        throw new BadRequestException('部分角色不存在');
-      }
+    if (!dto.roleIds?.length) {
+      throw new BadRequestException('管理员至少需要分配一个角色');
+    }
+    const roleCount = await this.roleRepo.count({
+      where: { id: In(dto.roleIds) },
+    });
+    if (roleCount !== dto.roleIds.length) {
+      throw new BadRequestException('部分角色不存在');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const initialPassword = this.generateInitialPassword();
+    const passwordHash = await bcrypt.hash(initialPassword, 10);
     const admin = this.adminUserRepo.create({
       username: dto.username,
       passwordHash,
@@ -296,30 +383,121 @@ export class RbacService {
       phone: dto.phone ?? null,
       email: dto.email ?? null,
       status: dto.status ?? 1,
+      needChangePassword: true,
     });
-    const saved = await this.adminUserRepo.save(admin);
-
-    if (dto.roleIds?.length) {
-      await this.dataSource.transaction(async (manager) => {
-        const rows = dto.roleIds.map((rid) => {
-          const aur = new AdminUserRole();
-          aur.adminUserId = saved.id;
-          aur.roleId = rid;
-          return aur;
-        });
-        await manager.insert(AdminUserRole, rows);
+    return this.dataSource.transaction(async (manager) => {
+      const operator = await manager.findOne(AdminUser, {
+        where: { id: operatorId },
+        select: ['id', 'realName'],
       });
-    }
-    return { id: saved.id, username: saved.username };
+      const saved = await manager.save(AdminUser, admin);
+      const rows = dto.roleIds.map((rid) => {
+        const aur = new AdminUserRole();
+        aur.adminUserId = saved.id;
+        aur.roleId = rid;
+        return aur;
+      });
+      await manager.insert(AdminUserRole, rows);
+      await manager.save(
+        OperationLog,
+        manager.create(OperationLog, {
+          adminId: operatorId,
+          username: operatorUsername,
+          operatorRealName: operator?.realName ?? null,
+          module: 'rbac',
+          action: 'create',
+          targetType: 'admin',
+          targetId: saved.id,
+          targetName: saved.username,
+          requestMethod: 'POST',
+          requestUrl: '/api/admin/rbac/admin',
+          params: JSON.stringify({
+            adminId: saved.id,
+            username: saved.username,
+            realName: saved.realName,
+            roleIds: dto.roleIds,
+          }),
+          ip: ip ?? null,
+          status: 1,
+        }),
+      );
+      return {
+        id: saved.id,
+        username: saved.username,
+        initialPassword,
+        needChangePassword: true,
+      };
+    });
+  }
+
+  private generateInitialPassword(): string {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    return Array.from({ length: 8 }, () =>
+      alphabet[randomInt(alphabet.length)],
+    ).join('');
   }
 
   /** 更新管理员基本信息 */
-  async updateAdmin(id: number, dto: UpdateAdminDto) {
+  async updateAdmin(
+    id: number,
+    dto: UpdateAdminDto,
+    operatorId = 0,
+    operatorUsername = '',
+    ip?: string,
+  ) {
     const admin = await this.adminUserRepo.findOne({ where: { id } });
     if (!admin) throw new NotFoundException('管理员不存在');
-    Object.assign(admin, dto);
-    await this.adminUserRepo.save(admin);
-    return { id };
+
+    const { roleIds, ...adminFields } = dto;
+    if (!roleIds?.length) {
+      throw new BadRequestException('管理员至少需要分配一个角色');
+    }
+    const roleCount = await this.roleRepo.count({ where: { id: In(roleIds) } });
+    if (roleCount !== roleIds.length) {
+      throw new BadRequestException('部分角色不存在');
+    }
+
+    await this.dataSource.transaction(async (manager) => {
+      const operator = operatorId
+        ? await manager.getRepository(AdminUser).findOne({
+            where: { id: operatorId },
+            select: ['id', 'realName'],
+          })
+        : null;
+      await manager.update(AdminUser, { id }, adminFields);
+      await manager.delete(AdminUserRole, { adminUserId: id });
+      await manager.insert(
+        AdminUserRole,
+        roleIds.map((roleId) => {
+          const relation = new AdminUserRole();
+          relation.adminUserId = id;
+          relation.roleId = roleId;
+          return relation;
+        }),
+      );
+      await manager.save(
+        OperationLog,
+        manager.create(OperationLog, {
+          adminId: operatorId || null,
+          username: operatorUsername,
+          operatorRealName: operator?.realName ?? null,
+          module: 'rbac',
+          action: 'update',
+          targetType: 'admin',
+          targetId: id,
+          targetName: admin.username,
+          requestMethod: 'PUT',
+          requestUrl: `/api/admin/rbac/admin/${id}`,
+          params: JSON.stringify({
+            adminId: id,
+            changedFields: [...Object.keys(adminFields), 'roleIds'],
+          }),
+          status: 1,
+          ip: ip ?? null,
+        }),
+      );
+    });
+    return { id, roleIds };
   }
 
   /** 重置管理员密码 */
@@ -365,6 +543,74 @@ export class RbacService {
     return { id, status: admin.status };
   }
 
+  /** 逻辑删除管理员并保留关联及审计信息 */
+  async deleteAdmin(
+    id: number,
+    operatorId: number,
+    username = '',
+    ip?: string,
+  ) {
+    if (id === operatorId) {
+      throw new BadRequestException('不能删除当前登录的管理员账号');
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const adminRepo = manager.getRepository(AdminUser);
+      const admin = await adminRepo.findOne({
+        where: { id },
+        relations: { roles: true },
+      });
+      if (!admin) throw new NotFoundException('管理员不存在');
+      const operator = await adminRepo.findOne({
+        where: { id: operatorId },
+        select: ['id', 'realName'],
+      });
+
+      if (admin.roles?.some((role) => role.code === 'super_admin')) {
+        const roleRepo = manager.getRepository(Role);
+        const superAdminRole = await roleRepo.findOne({
+          where: { code: 'super_admin' },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (superAdminRole) {
+          const superAdminCount = await adminRepo
+            .createQueryBuilder('admin')
+            .innerJoin(
+              'admin.roles',
+              'role',
+              'role.id = :roleId',
+              { roleId: superAdminRole.id },
+            )
+            .getCount();
+          if (superAdminCount <= 1) {
+            throw new BadRequestException('不能删除最后一个超级管理员');
+          }
+        }
+      }
+
+      await adminRepo.softDelete({ id });
+      await manager.save(
+        OperationLog,
+        manager.create(OperationLog, {
+          adminId: operatorId,
+          username,
+          operatorRealName: operator?.realName ?? null,
+          module: 'rbac',
+          action: 'delete',
+          targetType: 'admin',
+          targetId: id,
+          targetName: admin.username,
+          requestMethod: 'DELETE',
+          requestUrl: `/api/admin/rbac/admin/${id}`,
+          params: JSON.stringify({ adminId: id, username: admin.username }),
+          status: 1,
+          ip: ip ?? null,
+        }),
+      );
+      return { success: true };
+    });
+  }
+
   /* ============================= 视图工具 ============================= */
 
   private toAdminUserView(u: User) {
@@ -381,7 +627,8 @@ export class RbacService {
       city: u.city,
       district: u.district,
       swimLevel: u.swimLevel,
-      status: u.status,
+      status: u.deletedAt ? 2 : u.status,
+      deletedAt: u.deletedAt,
       registerSource: u.registerSource,
       lastLoginAt: u.lastLoginAt,
       lastLoginIp: u.lastLoginIp,
@@ -395,7 +642,7 @@ export class RbacService {
       username: a.username,
       realName: a.realName,
       avatarUrl: a.avatarUrl,
-      phone: a.phone ? maskPhone(a.phone) : null,
+      phone: a.phone,
       email: a.email,
       status: a.status,
       roles: (a.roles ?? []).map((r) => ({

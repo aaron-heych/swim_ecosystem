@@ -1,8 +1,11 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  DefaultValuePipe,
   Get,
   Param,
+  ParseIntPipe,
   Post,
   Query,
   UseGuards,
@@ -29,18 +32,30 @@ export class CoachController {
   @Public()
   @Get('list')
   async list(
-    @Query('page') page = 1,
-    @Query('pageSize') pageSize = 20,
+    @Query('page', new DefaultValuePipe('1'), ParseIntPipe) page = '1',
+    @Query('pageSize', new DefaultValuePipe('20'), ParseIntPipe) pageSize = '20',
     @Query('keyword') keyword?: string,
-    @Query('venueId') venueId?: number,
+    @Query('venueId', new ParseIntPipe({ optional: true }))
+    venueId?: string,
     @Query('strokes') strokes?: string,
   ) {
+    const pageNumber = Number(page);
+    const pageSizeNumber = Number(pageSize);
+    if (
+      !Number.isInteger(pageNumber) ||
+      !Number.isInteger(pageSizeNumber) ||
+      pageNumber < 1 ||
+      pageSizeNumber < 1 ||
+      pageSizeNumber > 100
+    ) {
+      throw new BadRequestException('page must be >= 1 and pageSize must be 1-100');
+    }
     const strokeArr = strokes ? strokes.split(',') : undefined;
     return this.coachService.listPublic(
-      Number(page) || 1,
-      Number(pageSize) || 20,
+      pageNumber,
+      pageSizeNumber,
       keyword,
-      venueId ? Number(venueId) : undefined,
+      venueId === undefined ? undefined : Number(venueId),
       strokeArr,
     );
   }

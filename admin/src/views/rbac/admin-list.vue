@@ -67,7 +67,7 @@
         <el-table-column label="创建时间" width="170">
           <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="340" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="onEdit(row)">编辑</el-button>
             <el-button link type="warning" @click="onResetPassword(row)">
@@ -82,6 +82,14 @@
               @click="onToggleStatus(row)"
             >
               {{ row.status === 1 ? '禁用' : '启用' }}
+            </el-button>
+            <el-button
+              v-if="row.id !== currentAdminId"
+              link
+              type="danger"
+              @click="onDeleteAdmin(row)"
+            >
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -108,26 +116,84 @@
       @closed="onFormClosed"
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+        <el-form-item v-if="!formDialog.id" label-width="0">
+          <el-alert
+            title="系统将自动生成初始密码，创建后请安全转交给管理员。"
+            type="info"
+            :closable="false"
+            show-icon
+          />
+        </el-form-item>
         <el-form-item label="用户名" prop="username">
           <el-input v-model="form.username" :disabled="!!formDialog.id" />
-        </el-form-item>
-        <el-form-item v-if="!formDialog.id" label="密码" prop="password">
-          <el-input v-model="form.password" type="password" show-password />
         </el-form-item>
         <el-form-item label="真实姓名" prop="realName">
           <el-input v-model="form.realName" />
         </el-form-item>
-        <el-form-item label="手机号" prop="phone">
+        <el-form-item
+          label="手机号"
+          prop="phone"
+          :required="!formDialog.id"
+        >
           <el-input v-model="form.phone" />
         </el-form-item>
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="form.email" />
+        </el-form-item>
+        <el-form-item label="角色" prop="roleIds" required>
+          <el-select
+            v-model="form.roleIds"
+            multiple
+            filterable
+            placeholder="请选择至少一个角色"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="role in roleOptions"
+              :key="role.id"
+              :label="`${role.name}（${role.code}）`"
+              :value="role.id"
+            />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="formDialog.visible = false">取消</el-button>
         <el-button type="primary" :loading="submitting" @click="onSubmitForm">
           确定
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="credentialDialog.visible"
+      title="管理员创建成功"
+      width="480px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+    >
+      <el-alert
+        title="初始密码仅显示一次，请安全转交给管理员。首次登录后必须立即修改。"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="credential-alert"
+      />
+      <el-form label-width="90px">
+        <el-form-item label="用户名">
+          <el-input :model-value="credentialDialog.username" readonly />
+        </el-form-item>
+        <el-form-item label="初始密码">
+          <el-input :model-value="credentialDialog.password" readonly>
+            <template #append>
+              <el-button @click="copyInitialPassword">复制</el-button>
+            </template>
+          </el-input>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button type="primary" @click="credentialDialog.visible = false">
+          已安全保存
         </el-button>
       </template>
     </el-dialog>
@@ -194,10 +260,14 @@ import {
   resetAdminPassword,
   updateAdminRoles,
   updateAdminStatus,
+  deleteAdmin,
   getRoleList,
 } from '@/api/user';
 import { ENABLE_STATUS, getDict } from '@/utils/dict';
+import { useUserStore } from '@/store/user';
 
+const userStore = useUserStore();
+const currentAdminId = userStore.userInfo.id;
 const loading = ref(false);
 const submitting = ref(false);
 const list = ref<any[]>([]);
@@ -217,22 +287,43 @@ const pwdFormRef = ref<FormInstance>();
 const formDialog = reactive({ visible: false, id: 0 });
 const form = reactive({
   username: '',
-  password: '',
   realName: '',
   phone: '',
   email: '',
+  roleIds: [] as number[],
 });
 const rules = computed<FormRules>(() => {
   const base: FormRules = {
     username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
     realName: [{ required: true, message: '请输入真实姓名', trigger: 'blur' }],
+    roleIds: [
+      {
+        type: 'array',
+        required: true,
+        min: 1,
+        message: '请至少选择一个角色',
+        trigger: 'change',
+      },
+    ],
   };
   if (!formDialog.id) {
-    base.password = [{ required: true, message: '请输入密码', trigger: 'blur' }];
+    base.phone = [
+      { required: true, message: '请输入手机号', trigger: 'blur' },
+      {
+        pattern: /^\d{6,20}$/,
+        message: '手机号必须为 6-20 位数字',
+        trigger: 'blur',
+      },
+    ];
   }
   return base;
 });
 
+const credentialDialog = reactive({
+  visible: false,
+  username: '',
+  password: '',
+});
 const pwdDialog = reactive({ visible: false, id: 0 });
 const pwdForm = reactive({ password: '' });
 const pwdRules: FormRules = {
@@ -260,8 +351,14 @@ async function loadData() {
 
 async function loadRoleOptions() {
   try {
-    const res: any = await getRoleList({ page: 1, pageSize: 1000 });
-    roleOptions.value = res.list || [];
+    const pageSize = 100;
+    const firstPage: any = await getRoleList({ page: 1, pageSize });
+    const roles = [...(firstPage.list || [])];
+    for (let page = 2; page <= (firstPage.totalPages || 1); page += 1) {
+      const res: any = await getRoleList({ page, pageSize });
+      roles.push(...(res.list || []));
+    }
+    roleOptions.value = roles;
   } catch {
     // ignore
   }
@@ -303,16 +400,17 @@ function onRoleClosed() {
 function onAdd() {
   formRef.value?.resetFields();
   formDialog.id = 0;
+  form.roleIds = [];
   formDialog.visible = true;
 }
 function onEdit(row: any) {
   formRef.value?.resetFields();
   formDialog.id = row.id;
   form.username = row.username || '';
-  form.password = '';
   form.realName = row.realName || '';
   form.phone = row.phone || '';
   form.email = row.email || '';
+  form.roleIds = (row.roles || []).map((r: any) => r.id);
   formDialog.visible = true;
 }
 async function onSubmitForm() {
@@ -322,25 +420,44 @@ async function onSubmitForm() {
     submitting.value = true;
     try {
       const payload: any = {
-        username: form.username,
         realName: form.realName,
-        phone: form.phone,
-        email: form.email,
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
+        roleIds: form.roleIds,
       };
       if (formDialog.id) {
         await updateAdmin(formDialog.id, payload);
         ElMessage.success('更新成功');
       } else {
-        payload.password = form.password;
-        await createAdmin(payload);
-        ElMessage.success('创建成功');
+        const created: any = await createAdmin({
+          ...payload,
+          username: form.username,
+        });
+        if (!created.initialPassword) {
+          ElMessage.error('管理员已创建，但未能获取初始密码，请尽快为其重置密码。');
+          formDialog.visible = false;
+          await loadData();
+          return;
+        }
+        credentialDialog.username = created.username;
+        credentialDialog.password = created.initialPassword;
+        credentialDialog.visible = true;
       }
       formDialog.visible = false;
-      loadData();
+      await loadData();
     } finally {
       submitting.value = false;
     }
   });
+}
+
+async function copyInitialPassword() {
+  try {
+    await navigator.clipboard.writeText(credentialDialog.password);
+    ElMessage.success('初始密码已复制');
+  } catch {
+    ElMessage.error('复制失败，请手动复制初始密码');
+  }
 }
 
 function onResetPassword(row: any) {
@@ -401,6 +518,27 @@ async function onToggleStatus(row: any) {
     ElMessage.success(`${action}成功`);
   } catch {
     // ignore
+  }
+}
+
+async function onDeleteAdmin(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `删除管理员 ${row.username} 后，其角色关联也会被移除，且无法恢复。确定继续吗？`,
+      '删除管理员',
+      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
+    );
+  } catch {
+    return;
+  }
+
+  try {
+    await deleteAdmin(row.id);
+    ElMessage.success('管理员已删除');
+    if (list.value.length === 1 && query.page > 1) query.page -= 1;
+    await loadData();
+  } catch {
+    // Errors are reported by the request interceptor.
   }
 }
 

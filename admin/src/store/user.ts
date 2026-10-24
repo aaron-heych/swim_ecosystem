@@ -6,9 +6,11 @@ export interface AdminUser {
   username: string;
   realName?: string;
   avatar?: string;
-  roles?: { id: number; name: string; code: string }[];
+  roles?: ({ id: number; name: string; code: string } | string)[];
+  roleCodes?: string[];
   permissions?: string[];
   associationId?: number | null;
+  needChangePassword?: boolean;
 }
 
 const TOKEN_KEY = 'swim_admin_token';
@@ -55,7 +57,10 @@ export const useUserStore = defineStore('user', () => {
 
   /** 当前用户角色码列表 */
   function roleCodes(): string[] {
-    return userInfo.value.roles?.map((r) => r.code) ?? [];
+    const roleCodes = userInfo.value.roles?.map((role) =>
+      typeof role === 'string' ? role : role.code,
+    );
+    return [...new Set([...(roleCodes ?? []), ...(userInfo.value.roleCodes ?? [])])];
   }
 
   /** 是否为协会会长（受数据隔离限制，仅能管理所属协会） */

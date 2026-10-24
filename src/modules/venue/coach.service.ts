@@ -344,12 +344,21 @@ export class CoachService {
   ): Promise<PaginatedResult<CoachReview>> {
     const qb = this.reviewRepo
       .createQueryBuilder('r')
+      .withDeleted()
       .where('r.coach_id = :coachId', { coachId })
       .leftJoinAndSelect('r.user', 'user')
       .orderBy('r.created_at', 'DESC')
       .skip((page - 1) * pageSize)
       .take(pageSize);
     const [list, total] = await qb.getManyAndCount();
+    list.forEach((review) => {
+      if (review.user) {
+        review.user.isDeleted = !!review.user.deletedAt;
+        review.user.displayName = review.user.deletedAt
+          ? '已注销用户'
+          : review.user.realName || review.user.nickname || '用户';
+      }
+    });
     return paginate(list, total, page, pageSize);
   }
 
@@ -379,7 +388,7 @@ export class CoachService {
       qb.andWhere('c.status = :status', { status });
     }
     qb.orderBy('c.sort', 'DESC')
-      .addOrderBy('c.created_at', 'DESC')
+      .addOrderBy('c.createdAt', 'DESC')
       .skip((page - 1) * pageSize)
       .take(pageSize);
     const [list, total] = await qb.getManyAndCount();
@@ -503,7 +512,7 @@ export class CoachService {
   ): Promise<PaginatedResult<CoachAppointment>> {
     const { page, pageSize, coachId, userId, status, payStatus, orderNo } =
       query;
-    const qb = this.apptRepo.createQueryBuilder('a');
+    const qb = this.apptRepo.createQueryBuilder('a').withDeleted();
     if (coachId) qb.andWhere('a.coach_id = :coachId', { coachId });
     if (userId) qb.andWhere('a.user_id = :userId', { userId });
     if (status !== undefined && status !== null) {
@@ -519,6 +528,14 @@ export class CoachService {
       .skip((page - 1) * pageSize)
       .take(pageSize);
     const [list, total] = await qb.getManyAndCount();
+    list.forEach((appointment) => {
+      if (appointment.user) {
+        appointment.user.isDeleted = !!appointment.user.deletedAt;
+        appointment.user.displayName = appointment.user.deletedAt
+          ? '已注销用户'
+          : appointment.user.realName || appointment.user.nickname || '用户';
+      }
+    });
     return paginate(list, total, page, pageSize);
   }
 
@@ -526,6 +543,7 @@ export class CoachService {
     const appt = await this.apptRepo.findOne({
       where: { id } as any,
       relations: ['coach', 'user', 'course', 'schedule', 'venue', 'reviews'],
+      withDeleted: true,
     });
     if (!appt) throw new NotFoundException('预约单不存在');
     return appt;

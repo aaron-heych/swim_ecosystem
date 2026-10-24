@@ -14,7 +14,7 @@
  *   2. CREATE TABLE IF NOT EXISTS regions（不依赖后端 DB_SYNC 自动建表）
  *   3. 读取行政区划数据：优先用本地缓存 database/regions.json；
  *      缓存不存在时从远端拉取并写入缓存，后续可完全离线运行
- *   4. TRUNCATE regions（幂等，可重复执行）
+ *   4. 仅在 regions 表为空时初始化，避免覆盖后台维护过的数据
  *   5. 按省 → 市 → 区县 顺序批量入库，自维护 parent_id 与 sort
  *   6. 输出各层级入库数量
  *
@@ -155,13 +155,19 @@ async function main() {
   `);
   await conn.query('ALTER TABLE \`regions\` MODIFY \`code\` VARCHAR(9) NOT NULL;');
 
+  const [[{ total: existingCount }]] = await conn.query(
+    'SELECT COUNT(*) AS total FROM regions',
+  );
+  if (Number(existingCount) > 0) {
+    throw new Error(
+      'regions 表已有数据，初始化脚本不会覆盖。请使用后台“系统设置 → 行政区管理”维护。',
+    );
+  }
+
   // 2) 读取数据（本地缓存优先，缺失则远端拉取并缓存）
   const tree = await loadRegions();
 
-  // 3) 清空（幂等重跑）
-  await conn.query('TRUNCATE TABLE regions');
-
-  // 4) 省
+  // 3) 省
   const provinceRows = [];
   let pSort = 0;
   for (const p of tree) {

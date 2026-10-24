@@ -40,9 +40,5 @@ CREATE TABLE IF NOT EXISTS `announcement_recipients` (
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_announcement_recipient` (`announcement_id`, `user_id`),
-  KEY `idx_announcement_recipient_user` (`user_id`, `announcement_id`),
-  CONSTRAINT `fk_announcement_recipient_announcement`
-    FOREIGN KEY (`announcement_id`) REFERENCES `announcements` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_announcement_recipient_user`
-    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+  KEY `idx_announcement_recipient_user` (`user_id`, `announcement_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

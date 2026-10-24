@@ -82,11 +82,11 @@ export class CirclePost extends BaseEntity {
   favorCount: number;
 
   // ---- 关联 ----
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @ManyToOne(() => Venue, { nullable: true })
+  @ManyToOne(() => Venue, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'venue_id' })
   venue: Venue | null;
 
@@ -147,11 +147,14 @@ export class CardShare extends BaseTimestampEntity {
   status: number;
 
   // ---- 关联 ----
-  @OneToOne(() => CirclePost, (p) => p.cardShare, { onDelete: 'CASCADE' })
+  @OneToOne(() => CirclePost, (p) => p.cardShare, {
+    onDelete: 'CASCADE',
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'post_id' })
   post: CirclePost;
 
-  @ManyToOne(() => Venue)
+  @ManyToOne(() => Venue, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'venue_id' })
   venue: Venue;
 }
@@ -193,11 +196,14 @@ export class BuddyInvitation extends BaseTimestampEntity {
   status: number;
 
   // ---- 关联 ----
-  @OneToOne(() => CirclePost, (p) => p.buddyInvitation, { onDelete: 'CASCADE' })
+  @OneToOne(() => CirclePost, (p) => p.buddyInvitation, {
+    onDelete: 'CASCADE',
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'post_id' })
   post: CirclePost;
 
-  @ManyToOne(() => Venue)
+  @ManyToOne(() => Venue, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'venue_id' })
   venue: Venue;
 }
@@ -257,15 +263,18 @@ export class Activity extends BaseTimestampEntity {
   status: number;
 
   // ---- 关联 ----
-  @OneToOne(() => CirclePost, (p) => p.activity, { onDelete: 'CASCADE' })
+  @OneToOne(() => CirclePost, (p) => p.activity, {
+    onDelete: 'CASCADE',
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'post_id' })
   post: CirclePost;
 
-  @ManyToOne(() => Association, { nullable: true })
+  @ManyToOne(() => Association, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'association_id' })
   association: Association | null;
 
-  @ManyToOne(() => Venue, { nullable: true })
+  @ManyToOne(() => Venue, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'venue_id' })
   venue: Venue | null;
 
@@ -299,15 +308,18 @@ export class ActivityParticipant extends BaseTimestampEntity {
   reviewedAt: Date;
 
   // ---- 关联 ----
-  @ManyToOne(() => Activity, (a) => a.participants, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Activity, (a) => a.participants, {
+    onDelete: 'CASCADE',
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'activity_id' })
   activity: Activity;
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @ManyToOne(() => User, { nullable: true })
+  @ManyToOne(() => User, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'reviewer_id' })
   reviewer: User | null;
 }
@@ -345,15 +357,18 @@ export class CircleComment {
   createdAt: Date;
 
   // ---- 关联 ----
-  @ManyToOne(() => CirclePost, (p) => p.comments, { onDelete: 'CASCADE' })
+  @ManyToOne(() => CirclePost, (p) => p.comments, {
+    onDelete: 'CASCADE',
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'post_id' })
   post: CirclePost;
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @ManyToOne(() => User, { nullable: true })
+  @ManyToOne(() => User, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'reply_user_id' })
   replyUser: User | null;
 }
@@ -380,7 +395,7 @@ export class CircleLike {
   createdAt: Date;
 
   // ---- 关联 ----
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'user_id' })
   user: User;
 }
@@ -403,11 +418,14 @@ export class CircleFavorite {
   createdAt: Date;
 
   // ---- 关联 ----
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @ManyToOne(() => CirclePost, { onDelete: 'CASCADE' })
+  @ManyToOne(() => CirclePost, {
+    onDelete: 'CASCADE',
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'post_id' })
   post: CirclePost;
 }
@@ -458,11 +476,11 @@ export class Report {
   createdAt: Date;
 
   // ---- 关联 ----
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'reporter_id' })
   reporter: User;
 
-  @ManyToOne(() => AdminUser, { nullable: true })
+  @ManyToOne(() => AdminUser, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'handler_id' })
   handler: AdminUser | null;
 }

@@ -104,7 +104,7 @@ export class CrawlLog {
   createdAt: Date;
 
   // ---- 关联 ----
-  @ManyToOne(() => EventSource, (s) => s.crawlLogs)
+  @ManyToOne(() => EventSource, (s) => s.crawlLogs, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'source_id' })
   source: EventSource;
 }
@@ -224,11 +224,11 @@ export class Event extends BaseEntity {
   creatorId: number;
 
   // ---- 关联 ----
-  @ManyToOne(() => EventSource, (s) => s.events, { nullable: true })
+  @ManyToOne(() => EventSource, (s) => s.events, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'source_id' })
   source: EventSource | null;
 
-  @ManyToOne(() => AdminUser, { nullable: true })
+  @ManyToOne(() => AdminUser, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'creator_id' })
   creator: AdminUser | null;
 
@@ -280,7 +280,10 @@ export class EventGroup extends BaseTimestampEntity {
   sort: number;
 
   // ---- 关联 ----
-  @ManyToOne(() => Event, (e) => e.groups, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Event, (e) => e.groups, {
+    onDelete: 'CASCADE',
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'event_id' })
   event: Event;
 
@@ -348,15 +351,15 @@ export class EventRegistration extends BaseTimestampEntity {
   remark: string;
 
   // ---- 关联 ----
-  @ManyToOne(() => Event, (e) => e.registrations)
+  @ManyToOne(() => Event, (e) => e.registrations, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'event_id' })
   event: Event;
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @ManyToOne(() => Association, { nullable: true })
+  @ManyToOne(() => Association, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'association_id' })
   association: Association | null;
 
@@ -400,11 +403,14 @@ export class EventRegistrationItem extends BaseTimestampEntity {
   status: number;
 
   // ---- 关联 ----
-  @ManyToOne(() => EventRegistration, (r) => r.items, { onDelete: 'CASCADE' })
+  @ManyToOne(() => EventRegistration, (r) => r.items, {
+    onDelete: 'CASCADE',
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'registration_id' })
   registration: EventRegistration;
 
-  @ManyToOne(() => EventGroup, (g) => g.items)
+  @ManyToOne(() => EventGroup, (g) => g.items, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'group_id' })
   group: EventGroup;
 }

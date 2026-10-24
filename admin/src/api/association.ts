@@ -3,6 +3,16 @@ import { get, post, put, del } from './request';
 export function getAssociationList(params: any) {
   return get('/admin/association/list', params);
 }
+export function downloadAssociationImportTemplate() {
+  return get('/admin/association/import/template', undefined, {
+    responseType: 'blob',
+  });
+}
+export function importAssociations(file: File) {
+  const fd = new FormData();
+  fd.append('file', file);
+  return post('/admin/association/import', fd, { responseType: 'blob' });
+}
 export function getAssociationDetail(id: number) {
   return get(`/admin/association/${id}`);
 }

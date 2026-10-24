@@ -54,6 +54,12 @@
       <el-table :data="list" v-loading="loading" border stripe>
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="studentName" label="学员姓名" width="110" />
+        <el-table-column label="账号" width="120">
+          <template #default="{ row }">
+            <el-tag v-if="row.user?.isDeleted" type="info">已注销用户</el-tag>
+            <span v-else>{{ row.user?.displayName || '-' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="phone" label="联系电话" width="130" />
         <el-table-column label="教练" width="110">
           <template #default="{ row }">{{ row.coach?.name ?? '-' }}</template>

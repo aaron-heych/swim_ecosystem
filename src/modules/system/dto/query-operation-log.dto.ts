@@ -6,6 +6,18 @@ import { Type } from 'class-transformer';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 export class QueryOperationLogDto extends PaginationDto {
+  @IsString()
+  @IsOptional()
+  operatorKeyword?: string;
+
+  @IsString()
+  @IsOptional()
+  targetKeyword?: string;
+
+  @IsString()
+  @IsOptional()
+  keyword?: string;
+
   @IsInt()
   @IsOptional()
   @Min(1)

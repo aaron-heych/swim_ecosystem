@@ -77,6 +77,18 @@
             @keyup.enter="handleSearch"
           />
         </el-form-item>
+        <el-form-item label="成立日期">
+          <el-date-picker
+            v-model="establishDateRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            range-separator="至"
+            clearable
+            style="width: 260px"
+          />
+        </el-form-item>
         <el-form-item label="状态">
           <el-select
             v-model="query.status"
@@ -102,6 +114,9 @@
     <!-- 主表格 -->
     <div class="table-container">
       <div class="mb-16">
+        <el-button v-if="!isSubAdmin" @click="openImport">
+          批量导入
+        </el-button>
         <el-button v-if="!isSubAdmin" type="primary" @click="openCreate">
           <el-icon><Plus /></el-icon>新增协会
         </el-button>
@@ -253,7 +268,7 @@
             v-model="form.establishDate"
             type="date"
             value-format="YYYY-MM-DD"
-            placeholder="未选择则默认为当天"
+            placeholder="请选择成立日期"
             style="width: 100%"
           />
         </el-form-item>
@@ -306,6 +321,57 @@
       </template>
     </el-dialog>
 
+    <el-dialog
+      v-model="importDialogVisible"
+      title="批量导入协会"
+      width="560px"
+      @closed="resetImport"
+    >
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        title="请先下载模板并按表头填写。省份 code 必填；城市和区县 code 请按实际地区填写。"
+      >
+        <template #default>
+          导入成功的数据会立即保存；失败行会单独生成 Excel 错误报告。
+          <el-link
+            type="primary"
+            :underline="false"
+            :disabled="templateLoading"
+            @click="downloadImportTemplate"
+          >
+            {{ templateLoading ? '正在生成模板…' : '下载导入模板' }}
+          </el-link>
+        </template>
+      </el-alert>
+      <el-upload
+        ref="importUpload"
+        drag
+        :auto-upload="false"
+        :limit="1"
+        accept=".xlsx"
+        :on-change="onImportFileChange"
+        :on-remove="onImportFileRemove"
+      >
+        <div class="upload-copy">
+          <div>拖拽 Excel 文件到此处，或点击选择</div>
+          <div class="upload-format">仅支持 .xlsx，文件大小不超过 5MB</div>
+        </div>
+      </el-upload>
+      <template #footer>
+        <el-button @click="importDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="importLoading"
+          :disabled="!importFile"
+          @click="submitImport"
+        >
+          开始导入
+        </el-button>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -316,8 +382,11 @@ import { ArrowDown } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
 import {
   getAssociationList,
+  downloadAssociationImportTemplate,
+  importAssociations,
   createAssociation,
   updateAssociation,
+  updateAssociationStatus,
   deleteAssociation,
 } from '@/api/association';
 import { getProvinces, getRegionChildren, type RegionItem } from '@/api/region';
@@ -344,9 +413,22 @@ const query = reactive({
   keyword: '',
   contactName: '',
   contactPhone: '',
+  establishStart: undefined as string | undefined,
+  establishEnd: undefined as string | undefined,
   status: undefined as number | undefined,
   page: 1,
   pageSize: 10,
+});
+const establishDateRange = computed<[string, string] | null>({
+  get() {
+    return query.establishStart && query.establishEnd
+      ? [query.establishStart, query.establishEnd]
+      : null;
+  },
+  set(range) {
+    query.establishStart = range?.[0];
+    query.establishEnd = range?.[1];
+  },
 });
 
 async function loadData() {
@@ -370,6 +452,8 @@ function handleReset() {
   query.keyword = '';
   query.contactName = '';
   query.contactPhone = '';
+  query.establishStart = undefined;
+  query.establishEnd = undefined;
   query.status = undefined;
   query.page = 1;
   loadData();
@@ -519,11 +603,7 @@ const formTitle = ref('新增协会');
 const submitting = ref(false);
 const formRef = ref<FormInstance>();
 const editingId = ref<number | null>(null);
-const todayStr = () => {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
+const originalStatus = ref<number | null>(null);
 const defaultForm = () => ({
   name: '',
   shortName: '',
@@ -553,11 +633,13 @@ const rules = computed<FormRules>(() => {
     base.contactName = [{ required: true, message: '请输入负责人', trigger: 'blur' }];
     base.contactPhone = [{ required: true, message: '请输入负责人电话', trigger: 'blur' }];
   }
+  base.establishDate = [{ required: true, message: '请选择成立日期', trigger: 'change' }];
   return base;
 });
 
 async function openCreate() {
   editingId.value = null;
+  originalStatus.value = null;
   formTitle.value = '新增协会';
   Object.assign(form, defaultForm());
   await ensureProvinces();
@@ -570,6 +652,7 @@ async function openCreate() {
 }
 async function openEdit(row: any) {
   editingId.value = row.id;
+  originalStatus.value = row.status ?? 1;
   formTitle.value = '编辑协会';
   Object.assign(form, {
     name: row.name ?? '',
@@ -596,6 +679,7 @@ function resetForm() {
   formRef.value?.resetFields();
   Object.assign(form, defaultForm());
   editingId.value = null;
+  originalStatus.value = null;
   selectedProvinceId.value = undefined;
   selectedCityId.value = undefined;
   selectedDistrictId.value = undefined;
@@ -606,15 +690,17 @@ async function submitForm() {
   if (!formRef.value) return;
   await formRef.value.validate(async (valid) => {
     if (!valid) return;
-    // 成立日期未输入时默认为当天
-    if (!form.establishDate) form.establishDate = todayStr();
     submitting.value = true;
     try {
+      const { status, ...associationData } = form;
       if (editingId.value) {
-        await updateAssociation(editingId.value, { ...form });
+        await updateAssociation(editingId.value, { ...associationData });
+        if (status !== originalStatus.value) {
+          await updateAssociationStatus(editingId.value, status);
+        }
         ElMessage.success('更新成功');
       } else {
-        await createAssociation({ ...form });
+        await createAssociation({ ...associationData });
         ElMessage.success('创建成功');
       }
       formDialogVisible.value = false;
@@ -633,6 +719,71 @@ const detailRow = ref<any>(null);
 function openDetail(row: any) {
   detailRow.value = row;
   detailDialogVisible.value = true;
+}
+
+const importDialogVisible = ref(false);
+const templateLoading = ref(false);
+const importLoading = ref(false);
+const importFile = ref<File | null>(null);
+const importUpload = ref();
+
+function openImport() {
+  importDialogVisible.value = true;
+}
+
+function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function downloadImportTemplate() {
+  templateLoading.value = true;
+  try {
+    const blob = await downloadAssociationImportTemplate() as Blob;
+    saveBlob(blob, '冬泳协会批量导入模板.xlsx');
+  } catch {
+    // 错误已在拦截器处理
+  } finally {
+    templateLoading.value = false;
+  }
+}
+
+function onImportFileChange(uploadFile: any) {
+  importFile.value = uploadFile.raw ?? null;
+}
+
+function onImportFileRemove() {
+  importFile.value = null;
+}
+
+function resetImport() {
+  importFile.value = null;
+  importUpload.value?.clearFiles();
+}
+
+async function submitImport() {
+  if (!importFile.value) return;
+  importLoading.value = true;
+  try {
+    const result = await importAssociations(importFile.value) as Blob;
+    if (result.type.includes('spreadsheetml')) {
+      saveBlob(result, '冬泳协会导入失败明细.xlsx');
+      ElMessage.warning('导入已完成，失败行已下载错误报告');
+    } else {
+      const response = JSON.parse(await result.text());
+      ElMessage.success(`导入成功，共导入 ${response.data.importedCount} 条`);
+    }
+    importDialogVisible.value = false;
+    await loadData();
+  } catch {
+    // 错误已在拦截器处理
+  } finally {
+    importLoading.value = false;
+  }
 }
 
 /* ============================ 操作下拉 ============================ */

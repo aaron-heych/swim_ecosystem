@@ -93,11 +93,11 @@ export class Feedback {
   createdAt: Date;
 
   // ---- 关联 ----
-  @ManyToOne(() => User, { nullable: true })
+  @ManyToOne(() => User, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'user_id' })
   user: User | null;
 
-  @ManyToOne(() => AdminUser, { nullable: true })
+  @ManyToOne(() => AdminUser, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'reply_by' })
   replier: AdminUser | null;
 }
@@ -180,12 +180,24 @@ export class OperationLog {
   @Column({ length: 64, nullable: true })
   username: string;
 
+  @Column({ length: 64, nullable: true, name: 'operator_real_name' })
+  operatorRealName: string;
+
   @Column({ length: 64 })
   module: string;
 
   /** 操作：create/update/delete/audit/login */
   @Column({ length: 64 })
   action: string;
+
+  @Column({ length: 32, nullable: true, name: 'target_type' })
+  targetType: string;
+
+  @Column({ type: 'bigint', unsigned: true, nullable: true, name: 'target_id' })
+  targetId: number;
+
+  @Column({ length: 128, nullable: true, name: 'target_name' })
+  targetName: string;
 
   @Column({ length: 10, nullable: true, name: 'request_method' })
   requestMethod: string;

@@ -6,6 +6,7 @@ export interface JwtPayload {
   username?: string;
   roleCodes?: string[];
   associationId?: number;
+  needChangePassword?: boolean;
   type?: 'user' | 'admin';
 }
 

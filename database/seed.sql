@@ -3,7 +3,6 @@
 -- 用法: docker exec -i myapp-mysql mysql -uroot -p123456 swimming_platform < seed.sql
 -- 管理员账号: admin / admin123
 -- =====================================================
-SET FOREIGN_KEY_CHECKS = 0;
 TRUNCATE TABLE users;
 TRUNCATE TABLE admin_users;
 TRUNCATE TABLE roles;
@@ -434,5 +433,3 @@ INSERT INTO operation_logs (admin_id, username, module, action, request_method, 
 (3, 'auditor', 'circle', '审核帖子 id=12 驳回', 'PUT', '/api/admin/circle/post/12/audit', '10.0.0.3', 'Mozilla/5.0', 1),
 (3, 'auditor', 'venue', '审核教练张顺驳回', 'PUT', '/api/admin/coach/6/audit', '10.0.0.3', 'Mozilla/5.0', 1),
 (2, 'operator', 'notification', '手动发送预约提醒', 'POST', '/api/admin/notification/send', '10.0.0.2', 'Mozilla/5.0', 0);
-
-SET FOREIGN_KEY_CHECKS = 1;

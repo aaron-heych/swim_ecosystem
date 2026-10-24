@@ -31,7 +31,11 @@ service.interceptors.response.use(
       }
       // 401 未登录
       if (res.code === 401) {
-        handleUnauthorized();
+        if (!isLoginRequest(response.config.url)) {
+          handleUnauthorized();
+        } else {
+          ElMessage.error(res.message || '用户名或密码错误');
+        }
         return Promise.reject(new Error(res.message || '未登录'));
       }
       ElMessage.error(res.message || '请求失败');
@@ -39,17 +43,31 @@ service.interceptors.response.use(
     }
     return res;
   },
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
     const status = error.response?.status;
-    if (status === 401) {
+    if (status === 401 && !isLoginRequest(error.config?.url)) {
       handleUnauthorized();
     } else if (status === 403) {
-      ElMessage.error('没有权限执行此操作');
+      const responseMessage = (error.response?.data as any)?.message;
+      ElMessage.error(
+        (Array.isArray(responseMessage) ? responseMessage[0] : responseMessage) ||
+          '没有权限执行此操作',
+      );
     } else if (status === 404) {
       ElMessage.error('接口不存在');
     } else {
-      const msg =
+      let msg =
         (error.response?.data as any)?.message || error.message || '网络错误';
+      const responseData = error.response?.data;
+      if (typeof Blob !== 'undefined' && responseData instanceof Blob) {
+        try {
+          const payload = JSON.parse(await responseData.text());
+          msg = (Array.isArray(payload.message) ? payload.message[0] : payload.message)
+            || msg;
+        } catch {
+          // Non-JSON blob responses retain the Axios error message.
+        }
+      }
       ElMessage.error(msg);
     }
     return Promise.reject(error);
@@ -61,6 +79,10 @@ function handleUnauthorized() {
   userStore.logout();
   ElMessage.warning('登录已过期，请重新登录');
   router.replace(`/login?redirect=${router.currentRoute.value.fullPath}`);
+}
+
+function isLoginRequest(url?: string): boolean {
+  return url?.split('?')[0].replace(/\/+$/, '').endsWith('/admin/user/login') ?? false;
 }
 
 // 封装便捷方法

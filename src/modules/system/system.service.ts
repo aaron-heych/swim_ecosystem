@@ -244,9 +244,35 @@ export class SystemService {
   /* ============================ OperationLog ============================ */
 
   async findOperationLogs(query: QueryOperationLogDto): Promise<PaginatedResult<OperationLog>> {
-    const { page, pageSize, keyword, adminId, module, action, status, startDate, endDate } = query;
+    const {
+      page,
+      pageSize,
+      keyword,
+      operatorKeyword,
+      targetKeyword,
+      adminId,
+      module,
+      action,
+      status,
+      startDate,
+      endDate,
+    } = query;
     const qb = this.logRepo.createQueryBuilder('l');
     if (adminId) qb.andWhere('l.admin_id = :adminId', { adminId });
+    if (operatorKeyword) {
+      qb.andWhere(
+        '(l.username LIKE :operatorKeyword OR l.operator_real_name LIKE :operatorKeyword)',
+        {
+          operatorKeyword: `%${operatorKeyword}%`,
+        },
+      );
+    }
+    if (targetKeyword) {
+      qb.andWhere(
+        '(l.target_name LIKE :targetKeyword OR CAST(l.target_id AS CHAR) LIKE :targetKeyword OR l.params LIKE :targetKeyword)',
+        { targetKeyword: `%${targetKeyword}%` },
+      );
+    }
     if (module) qb.andWhere('l.module = :module', { module });
     if (action) qb.andWhere('l.action = :action', { action });
     if (status !== undefined) qb.andWhere('l.status = :status', { status });
@@ -261,9 +287,12 @@ export class SystemService {
       qb.andWhere('l.createdAt <= :end', { end: new Date(endDate) });
     }
     if (keyword) {
-      qb.andWhere('(l.username LIKE :kw OR l.error_msg LIKE :kw)', {
-        kw: `%${keyword}%`,
-      });
+      qb.andWhere(
+        '(l.username LIKE :kw OR l.target_name LIKE :kw OR CAST(l.target_id AS CHAR) LIKE :kw OR l.params LIKE :kw OR l.error_msg LIKE :kw)',
+        {
+          kw: `%${keyword}%`,
+        },
+      );
     }
     qb.orderBy('l.createdAt', 'DESC');
     qb.skip((page - 1) * pageSize).take(pageSize);

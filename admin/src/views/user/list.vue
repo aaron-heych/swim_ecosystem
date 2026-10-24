@@ -19,7 +19,7 @@
             style="width: 140px"
           >
             <el-option
-              v-for="(v, k) in ENABLE_STATUS"
+              v-for="(v, k) in USER_STATUS"
               :key="k"
               :label="v.label"
               :value="Number(k)"
@@ -41,7 +41,11 @@
             <el-avatar :src="row.avatar" :size="36" />
           </template>
         </el-table-column>
-        <el-table-column label="用户名" prop="username" min-width="120" />
+        <el-table-column label="用户名" min-width="120">
+          <template #default="{ row }">
+            {{ row.realName || row.nickname || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="手机号" prop="phone" width="140" />
         <el-table-column label="昵称" prop="nickname" min-width="120" />
         <el-table-column label="性别" width="90">
@@ -53,22 +57,31 @@
         </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
-            <el-tag :type="getDict(ENABLE_STATUS, row.status).type">
-              {{ getDict(ENABLE_STATUS, row.status).label }}
+            <el-tag :type="getDict(USER_STATUS, row.status).type">
+              {{ getDict(USER_STATUS, row.status).label }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="注册时间" width="170">
           <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="110" fixed="right">
+        <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
             <el-switch
+              v-if="row.status !== 2"
               :model-value="row.status === 1"
               active-text="启用"
               inactive-text="禁用"
               @change="onToggleStatus(row)"
             />
+            <el-button
+              v-if="row.status !== 2"
+              link
+              type="danger"
+              @click="onDelete(row)"
+            >
+              逻辑删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -91,8 +104,8 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { getUserList, updateUserStatus } from '@/api/user';
-import { GENDER, ENABLE_STATUS, getDict } from '@/utils/dict';
+import { deleteUser, getUserList, updateUserStatus } from '@/api/user';
+import { GENDER, USER_STATUS, getDict } from '@/utils/dict';
 
 const loading = ref(false);
 const list = ref<any[]>([]);
@@ -156,6 +169,25 @@ async function onToggleStatus(row: any) {
     await updateUserStatus(row.id, next);
     row.status = next;
     ElMessage.success(`${action}成功`);
+  } catch {
+    // 错误已统一处理
+  }
+}
+
+async function onDelete(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `确认逻辑删除用户 ${row.realName || row.nickname || row.phone || row.id} 吗？历史活动、报名和订单记录会保留。`,
+      '提示',
+      { type: 'warning' },
+    );
+  } catch {
+    return;
+  }
+  try {
+    await deleteUser(row.id);
+    ElMessage.success('用户已逻辑删除');
+    await loadData();
   } catch {
     // 错误已统一处理
   }

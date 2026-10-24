@@ -5,7 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import ExcelJS from 'exceljs';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { Association, AssociationMember } from './association.entity';
 import { Region } from '../region/region.entity';
 import { User } from '../user/user.entity';
@@ -24,6 +27,21 @@ import { aesEncrypt, aesDecrypt } from '../../common/utils/aes.util';
 
 @Injectable()
 export class AssociationService {
+  private static readonly ASSOCIATION_IMPORT_COLUMNS = [
+    { header: '协会名称', key: 'name', width: 24 },
+    { header: '协会简称', key: 'shortName', width: 18 },
+    { header: '省份code', key: 'provinceCode', width: 16 },
+    { header: '城市code', key: 'cityCode', width: 16 },
+    { header: '区县code', key: 'districtCode', width: 16 },
+    { header: '详细地址', key: 'address', width: 32 },
+    { header: '负责人', key: 'contactName', width: 16 },
+    { header: '负责人电话', key: 'contactPhone', width: 20 },
+    { header: '微信', key: 'wechat', width: 20 },
+    { header: '教练员', key: 'coach', width: 16 },
+    { header: '成立日期', key: 'establishDate', width: 16 },
+    { header: '协会简介', key: 'intro', width: 36 },
+  ];
+
   constructor(
     @InjectRepository(Association)
     private readonly associationRepo: Repository<Association>,
@@ -252,6 +270,8 @@ export class AssociationService {
       city,
       contactName,
       contactPhone,
+      establishStart,
+      establishEnd,
     } = query;
     const qb = this.associationRepo.createQueryBuilder('a');
 
@@ -284,6 +304,12 @@ export class AssociationService {
         contactPhone: `%${contactPhone}%`,
       });
     }
+    if (establishStart) {
+      qb.andWhere('a.establish_date >= :establishStart', { establishStart });
+    }
+    if (establishEnd) {
+      qb.andWhere('a.establish_date <= :establishEnd', { establishEnd });
+    }
 
     qb.orderBy('a.created_at', 'DESC')
       .skip((page - 1) * pageSize)
@@ -308,6 +334,346 @@ export class AssociationService {
     });
     if (!assoc) throw new NotFoundException('协会不存在');
     return assoc;
+  }
+
+  async createAssociationImportTemplate(): Promise<Buffer> {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('协会导入');
+    sheet.columns = AssociationService.ASSOCIATION_IMPORT_COLUMNS.map(
+      (column) => ({
+        ...column,
+        style: ['provinceCode', 'cityCode', 'districtCode'].includes(column.key)
+          ? { numFmt: '@' }
+          : undefined,
+      }),
+    );
+    const requiredHeaders = new Set([
+      '协会名称',
+      '省份code',
+      '负责人',
+      '负责人电话',
+      '成立日期',
+    ]);
+    sheet.getRow(1).eachCell((cell, columnNumber) => {
+      const column = AssociationService.ASSOCIATION_IMPORT_COLUMNS[columnNumber - 1];
+      if (column && requiredHeaders.has(column.header)) {
+        cell.value = {
+          richText: [
+            { text: column.header },
+            { text: ' *', font: { color: { argb: 'FFFF0000' }, bold: true } },
+          ],
+        };
+      }
+      cell.font = { bold: true };
+    });
+    sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    const regions = await this.regionRepo.find({
+      select: ['id', 'code', 'name', 'level', 'parentId', 'sort'],
+      order: { sort: 'ASC', code: 'ASC' },
+    });
+    const regionById = new Map(regions.map((region) => [String(region.id), region]));
+    const districts = regions.filter((region) => region.level === 3);
+    const districtSheet = workbook.addWorksheet('区县code参考');
+    districtSheet.columns = [
+      { header: '省份', key: 'provinceName', width: 20 },
+      { header: '省份code', key: 'provinceCode', width: 16, style: { numFmt: '@' } },
+      { header: '城市', key: 'cityName', width: 20 },
+      { header: '城市code', key: 'cityCode', width: 16, style: { numFmt: '@' } },
+      { header: '区县', key: 'districtName', width: 20 },
+      { header: '区县code', key: 'districtCode', width: 16, style: { numFmt: '@' } },
+    ];
+    districtSheet.getRow(1).font = { bold: true };
+    districtSheet.addRows(
+      districts.map((district) => {
+        const city = regionById.get(String(district.parentId));
+        const province = city
+          ? regionById.get(String(city.parentId))
+          : undefined;
+        return {
+          provinceName: province?.name ?? '',
+          provinceCode: province?.code ?? '',
+          cityName: city?.name ?? '',
+          cityCode: city?.code ?? '',
+          districtName: district.name,
+          districtCode: district.code,
+        };
+      }),
+    );
+    districtSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    const instructions = workbook.addWorksheet('填写说明');
+    instructions.addRows([
+      ['协会批量导入填写说明'],
+      ['请在“协会导入”工作表第 2 行开始填写，每行一条协会信息，并保留第一行表头。'],
+      ['表头红色 * 表示必填：协会名称、省份code、负责人、负责人电话、成立日期。'],
+      ['请在“区县code参考”工作表按省份、城市和区县名称查找对应 code，再填写到“协会导入”工作表。'],
+      ['省份/城市/区县名称与 code 必须对应正确的行政区划层级。'],
+      ['城市code、区县code 可留空；系统会根据填写的 code 自动生成地区名称。'],
+      ['成立日期请使用 YYYY-MM-DD 格式；同名协会或校验失败的行不会导入，并会放入错误报告。'],
+      ['单个文件最多导入 5000 条数据，仅支持 .xlsx 文件。'],
+    ]);
+    instructions.getColumn(1).width = 100;
+    instructions.getColumn(1).alignment = { wrapText: true };
+
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
+
+  async importAssociations(file: Buffer) {
+    const workbook = new ExcelJS.Workbook();
+    try {
+      const arrayBuffer = new ArrayBuffer(file.byteLength);
+      new Uint8Array(arrayBuffer).set(file);
+      await workbook.xlsx.load(arrayBuffer);
+    } catch {
+      throw new BadRequestException('无法读取 Excel 文件，请使用 .xlsx 格式模板');
+    }
+
+    const sheet = workbook.worksheets[0];
+    if (!sheet || sheet.rowCount < 2) {
+      throw new BadRequestException('导入文件中没有协会数据');
+    }
+    if (sheet.rowCount > 5001) {
+      throw new BadRequestException('单次最多导入 5000 条协会数据');
+    }
+
+    const headers = new Map<string, number>();
+    sheet.getRow(1).eachCell((cell, column) => {
+      const header = this.importCellText(cell.value).replace(/\s*\*$/, '').trim();
+      if (header && headers.has(header)) {
+        throw new BadRequestException(`Excel 表头重复：${header}`);
+      }
+      if (header) headers.set(header, column);
+    });
+    const requiredHeaders = AssociationService.ASSOCIATION_IMPORT_COLUMNS.map(
+      (column) => column.header,
+    );
+    const missingHeaders = requiredHeaders.filter((header) => !headers.has(header));
+    if (missingHeaders.length) {
+      throw new BadRequestException(
+        `导入模板缺少以下表头：${missingHeaders.join('、')}`,
+      );
+    }
+
+    const dataRows: Array<{
+      rowNumber: number;
+      values: Record<string, string>;
+    }> = [];
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const values: Record<string, string> = {};
+      for (const column of AssociationService.ASSOCIATION_IMPORT_COLUMNS) {
+        values[column.header] = this.importCellText(
+          row.getCell(headers.get(column.header)!).value,
+        );
+      }
+      if (Object.values(values).some(Boolean)) {
+        dataRows.push({ rowNumber, values });
+      }
+    });
+    if (!dataRows.length) {
+      throw new BadRequestException('导入文件中没有协会数据');
+    }
+    if (dataRows.length > 5000) {
+      throw new BadRequestException('单次最多导入 5000 条协会数据');
+    }
+
+    const regions = await this.regionRepo.find({
+      select: ['id', 'code', 'level', 'parentId'],
+    });
+    const regionByCode = new Map(regions.map((region) => [region.code, region]));
+    const seenNames = new Set<string>();
+    const errors: Array<{
+      rowNumber: number;
+      values: Record<string, string>;
+      error: string;
+    }> = [];
+    let importedCount = 0;
+
+    for (const row of dataRows) {
+      const value = (header: string) => row.values[header]?.trim() ?? '';
+      const dto = plainToInstance(CreateAssociationDto, {
+        name: value('协会名称'),
+        shortName: value('协会简称') || undefined,
+        provinceCode: value('省份code') || undefined,
+        cityCode: value('城市code') || undefined,
+        districtCode: value('区县code') || undefined,
+        address: value('详细地址') || undefined,
+        contactName: value('负责人') || undefined,
+        contactPhone: value('负责人电话') || undefined,
+        wechat: value('微信') || undefined,
+        coach: value('教练员') || undefined,
+        establishDate: value('成立日期') || undefined,
+        intro: value('协会简介') || undefined,
+      });
+
+      let rowError: string | undefined;
+      const validationErrors = await validate(dto);
+      if (validationErrors.length) {
+        rowError = validationErrors
+          .flatMap((error) => Object.values(error.constraints ?? {}))
+          .join('；');
+      }
+
+      const provinceCode = dto.provinceCode;
+      const cityCode = dto.cityCode;
+      const districtCode = dto.districtCode;
+      if (!rowError && !dto.contactName?.trim()) {
+        rowError = '负责人为必填项';
+      }
+      if (!rowError && !dto.contactPhone?.trim()) {
+        rowError = '负责人电话为必填项';
+      }
+      if (!rowError && !dto.establishDate?.trim()) {
+        rowError = '成立日期为必填项';
+      }
+      if (!rowError && !provinceCode) {
+        rowError = '省份code为必填项';
+      }
+      if (!rowError && provinceCode) {
+        const province = regionByCode.get(provinceCode);
+        if (!province || province.level !== 1) {
+          rowError = `省份code无效：${provinceCode}`;
+        }
+        if (!rowError && cityCode) {
+          const city = regionByCode.get(cityCode);
+          if (
+            !city ||
+            city.level !== 2 ||
+            String(city.parentId) !== String(province?.id)
+          ) {
+            rowError = `城市code无效或不属于省份 ${provinceCode}：${cityCode}`;
+          }
+        }
+        if (!rowError && districtCode) {
+          const district = regionByCode.get(districtCode);
+          const city = cityCode ? regionByCode.get(cityCode) : undefined;
+          if (!city) {
+            rowError = '填写区县code时必须同时填写城市code';
+          } else if (
+            !district ||
+            district.level !== 3 ||
+            String(district.parentId) !== String(city.id)
+          ) {
+            rowError = `区县code无效或不属于城市 ${cityCode}：${districtCode}`;
+          }
+        }
+      }
+
+      const name = dto.name?.trim();
+      const establishDate = dto.establishDate;
+      if (
+        !rowError &&
+        establishDate &&
+        !this.isValidImportDate(establishDate)
+      ) {
+        rowError = '成立日期格式无效，请使用 YYYY-MM-DD';
+      }
+      if (!rowError && name && seenNames.has(name)) {
+        rowError = `本文件中协会名称重复：${name}`;
+      }
+
+      if (!rowError) {
+        try {
+          await this.createByAdmin(dto);
+          if (name) seenNames.add(name);
+          importedCount += 1;
+        } catch (error) {
+          if (
+            error instanceof BadRequestException ||
+            error instanceof NotFoundException
+          ) {
+            rowError = error.message;
+          } else if (
+            error instanceof QueryFailedError &&
+            (error as QueryFailedError & { driverError?: { code?: string } })
+              .driverError?.code === 'ER_DUP_ENTRY'
+          ) {
+            rowError = `协会名称已存在：${name}`;
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      if (rowError) {
+        errors.push({ rowNumber: row.rowNumber, values: row.values, error: rowError });
+      }
+    }
+
+    return { importedCount, errors };
+  }
+
+  async createAssociationImportErrorReport(
+    importedCount: number,
+    errors: Array<{
+      rowNumber: number;
+      values: Record<string, string>;
+      error: string;
+    }>,
+  ): Promise<Buffer> {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('导入失败行');
+    sheet.addRow([`成功导入 ${importedCount} 条；以下 ${errors.length} 条未导入`]);
+    sheet.addRow([
+      'Excel行号',
+      ...AssociationService.ASSOCIATION_IMPORT_COLUMNS.map(
+        (column) => column.header,
+      ),
+      '失败原因',
+    ]);
+    sheet.getRow(2).font = { bold: true };
+    for (const error of errors) {
+      sheet.addRow([
+        error.rowNumber,
+        ...AssociationService.ASSOCIATION_IMPORT_COLUMNS.map(
+          (column) => error.values[column.header] ?? '',
+        ),
+        error.error,
+      ]);
+    }
+    sheet.columns = [
+      { width: 12 },
+      ...AssociationService.ASSOCIATION_IMPORT_COLUMNS.map((column) => ({
+        width: column.width,
+      })),
+      { width: 52 },
+    ];
+    sheet.views = [{ state: 'frozen', ySplit: 2 }];
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
+
+  private importCellText(value: ExcelJS.CellValue): string {
+    if (value === null || value === undefined) return '';
+    if (value instanceof Date) {
+      const pad = (number: number) => String(number).padStart(2, '0');
+      return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(
+        value.getDate(),
+      )}`;
+    }
+    if (typeof value === 'object') {
+      if ('text' in value && typeof value.text === 'string') return value.text.trim();
+      if ('richText' in value) {
+        return value.richText.map((part) => part.text).join('').trim();
+      }
+      if ('result' in value) return this.importCellText(value.result);
+      return '';
+    }
+    return String(value).trim();
+  }
+
+  private isValidImportDate(value: string): boolean {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match) return false;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return (
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 &&
+      date.getUTCDate() === day
+    );
   }
 
   /** 后台：管理员创建协会 */

@@ -10,15 +10,17 @@ import {
   Post,
   Put,
   Query,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { diskStorage, memoryStorage } from 'multer';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
+import { Response } from 'express';
 import { AssociationService } from './association.service';
 import { AdminJwtAuthGuard } from '../../common/guards/admin-jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
@@ -67,6 +69,73 @@ export class AssociationAdminController {
       query,
       this.getScopedAssociationId(user),
     );
+  }
+
+  @Get('import/template')
+  @RequirePermissions('association:create')
+  @ApiOperation({ summary: '下载协会批量导入模板' })
+  async downloadImportTemplate(@Res() response: Response) {
+    const file = await this.associationService.createAssociationImportTemplate();
+    response.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    response.setHeader(
+      'Content-Disposition',
+      'attachment; filename="association-import-template.xlsx"',
+    );
+    response.send(file);
+  }
+
+  @Post('import')
+  @RequirePermissions('association:create')
+  @ApiOperation({ summary: '批量导入协会' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (!/\.xlsx$/i.test(file.originalname)) {
+          return cb(
+            new BadRequestException('仅支持 .xlsx 格式的 Excel 文件'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async importAssociations(
+    @UploadedFile()
+    file: { originalname: string; buffer: Buffer },
+    @CurrentUser() user: JwtPayload,
+    @Res() response: Response,
+  ) {
+    this.assertNotSubAdmin(user);
+    if (!file) throw new BadRequestException('请选择 .xlsx 格式的导入文件');
+    const result = await this.associationService.importAssociations(file.buffer);
+    if (result.errors.length) {
+      const report =
+        await this.associationService.createAssociationImportErrorReport(
+          result.importedCount,
+          result.errors,
+        );
+      response.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      response.setHeader(
+        'Content-Disposition',
+        'attachment; filename="association-import-errors.xlsx"',
+      );
+      response.send(report);
+      return;
+    }
+    response.json({
+      code: 0,
+      message: 'success',
+      data: { importedCount: result.importedCount, failedCount: 0 },
+    });
   }
 
   /** 2. 协会详情（含 members 列表） */

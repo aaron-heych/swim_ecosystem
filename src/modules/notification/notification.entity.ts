@@ -138,11 +138,11 @@ export class UserSubscribe extends BaseTimestampEntity {
   lastAcceptAt: Date;
 
   // ---- 关联 ----
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @ManyToOne(() => MessageTemplate, (t) => t.userSubscribes)
+  @ManyToOne(() => MessageTemplate, (t) => t.userSubscribes, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'template_id' })
   template: MessageTemplate;
 }
@@ -210,11 +210,14 @@ export class NotificationLog {
   createdAt: Date;
 
   // ---- 关联 ----
-  @ManyToOne(() => User, { nullable: true })
+  @ManyToOne(() => User, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'user_id' })
   user: User | null;
 
-  @ManyToOne(() => MessageTemplate, (t) => t.logs, { nullable: true })
+  @ManyToOne(() => MessageTemplate, (t) => t.logs, {
+    nullable: true,
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'template_id' })
   template: MessageTemplate | null;
 }

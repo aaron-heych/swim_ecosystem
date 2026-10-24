@@ -91,6 +91,9 @@
             </span>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item command="change-password">
+                  <el-icon><Lock /></el-icon>修改密码
+                </el-dropdown-item>
                 <el-dropdown-item command="logout">
                   <el-icon><SwitchButton /></el-icon>退出登录
                 </el-dropdown-item>
@@ -116,7 +119,7 @@
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
-import { ArrowDown, SwitchButton, UserFilled } from '@element-plus/icons-vue';
+import { ArrowDown, Lock, SwitchButton, UserFilled } from '@element-plus/icons-vue';
 import { useUserStore } from '@/store/user';
 import { routes } from '@/router';
 
@@ -127,21 +130,22 @@ const isCollapse = ref(false);
 
 // 当前用户角色码集合
 const userRoleCodes = computed<string[]>(
-  () => userStore.userInfo.roles?.map((r) => r.code) ?? [],
+  () => userStore.roleCodes(),
 );
 const isSuperAdmin = computed(() => userRoleCodes.value.includes('super_admin'));
 
 // 侧边栏路由（排除 login / 404，并按 meta.roles 做角色过滤）
 // 无 meta.roles：所有登录用户可见；有 meta.roles：super_admin 全见，其他角色需命中
-const menuRoutes = computed(() =>
-  routes.filter((r) => {
+const menuRoutes = computed(() => {
+  if (userStore.userInfo.needChangePassword) return [];
+  return routes.filter((r) => {
     if (r.path === '/login' || r.path.includes(':pathMatch')) return false;
     const allowed = (r.meta as any)?.roles as string[] | undefined;
     if (!allowed || allowed.length === 0) return true;
     if (isSuperAdmin.value) return true;
     return allowed.some((code) => userRoleCodes.value.includes(code));
-  })
-);
+  });
+});
 
 /** 子路由是否对当前用户可见（meta.roles 规则与顶级菜单一致） */
 function childVisible(child: any): boolean {
@@ -181,6 +185,10 @@ function resolvePath(parent: string, child: string) {
 }
 
 async function handleCommand(cmd: string) {
+  if (cmd === 'change-password') {
+    router.push('/account/change-password');
+    return;
+  }
   if (cmd === 'logout') {
     await ElMessageBox.confirm('确定退出登录？', '提示', {
       type: 'warning',
