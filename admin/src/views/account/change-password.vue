@@ -1,57 +1,69 @@
 <template>
-  <div class="password-page">
-    <el-card class="password-card" shadow="never">
-      <h2>{{ userStore.userInfo.needChangePassword ? '首次登录，请修改密码' : '修改密码' }}</h2>
-      <el-alert
-        v-if="userStore.userInfo.needChangePassword"
-        title="为保障账号安全，请先修改初始密码后再使用管理后台。"
-        type="warning"
-        :closable="false"
-        show-icon
-        class="password-alert"
-      />
-      <el-form
-        ref="formRef"
-        :model="form"
-        :rules="rules"
-        label-width="110px"
-        @submit.prevent="submit"
-      >
-        <el-form-item label="当前密码" prop="currentPassword">
-          <el-input
-            v-model="form.currentPassword"
-            type="password"
-            show-password
-            autocomplete="current-password"
-          />
-        </el-form-item>
-        <el-form-item label="新密码" prop="newPassword">
-          <el-input
-            v-model="form.newPassword"
-            type="password"
-            show-password
-            autocomplete="new-password"
-          />
-        </el-form-item>
-        <el-form-item label="确认新密码" prop="confirmPassword">
-          <el-input
-            v-model="form.confirmPassword"
-            type="password"
-            show-password
-            autocomplete="new-password"
-            @keyup.enter="submit"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :loading="submitting" @click="submit">
-            确认修改
-          </el-button>
-          <el-button v-if="!userStore.userInfo.needChangePassword" @click="router.back()">
-            取消
-          </el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+  <div class="password-standalone">
+    <div class="top-bar">
+      <div class="brand" @click="router.push('/portal')">
+        <span class="brand-icon">🏊</span>
+        <span class="brand-text">游泳生态圈管理后台</span>
+      </div>
+      <el-button text @click="router.push('/portal')">
+        <el-icon style="margin-right: 4px"><Back /></el-icon>返回工作台
+      </el-button>
+    </div>
+
+    <div class="password-body">
+      <el-card class="password-card" shadow="never">
+        <h2>{{ userStore.userInfo.needChangePassword ? '首次登录，请修改密码' : '修改密码' }}</h2>
+        <el-alert
+          v-if="userStore.userInfo.needChangePassword"
+          title="为保障账号安全，请先修改初始密码后再使用管理后台。"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="password-alert"
+        />
+        <el-form
+          ref="formRef"
+          :model="form"
+          :rules="rules"
+          label-width="110px"
+          @submit.prevent="submit"
+        >
+          <el-form-item label="当前密码" prop="currentPassword">
+            <el-input
+              v-model="form.currentPassword"
+              type="password"
+              show-password
+              autocomplete="current-password"
+            />
+          </el-form-item>
+          <el-form-item label="新密码" prop="newPassword">
+            <el-input
+              v-model="form.newPassword"
+              type="password"
+              show-password
+              autocomplete="new-password"
+            />
+          </el-form-item>
+          <el-form-item label="确认新密码" prop="confirmPassword">
+            <el-input
+              v-model="form.confirmPassword"
+              type="password"
+              show-password
+              autocomplete="new-password"
+              @keyup.enter="submit"
+            />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :loading="submitting" @click="submit">
+              确认修改
+            </el-button>
+            <el-button v-if="!userStore.userInfo.needChangePassword" @click="router.push('/portal')">
+              取消
+            </el-button>
+          </el-form-item>
+        </el-form>
+      </el-card>
+    </div>
   </div>
 </template>
 
@@ -59,6 +71,7 @@
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
+import { Back } from '@element-plus/icons-vue';
 import { changeAdminPassword } from '@/api/user';
 import { useUserStore } from '@/store/user';
 
@@ -111,7 +124,7 @@ async function submit() {
       needChangePassword: result.admin?.needChangePassword ?? false,
     });
     ElMessage.success('密码修改成功');
-    await router.replace('/dashboard');
+    await router.replace('/portal');
   } catch {
     // Errors are reported by the request interceptor.
   } finally {
@@ -121,15 +134,51 @@ async function submit() {
 </script>
 
 <style scoped>
-.password-page {
+.password-standalone {
+  min-height: 100vh;
+  background: #f0f2f5;
+  display: flex;
+  flex-direction: column;
+}
+
+.top-bar {
+  background: linear-gradient(120deg, #e8f3ff 0%, #f0f7ff 60%, #eefaff 100%);
+  border-bottom: 1px solid #e6eef8;
+  padding: 14px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.brand-icon {
+  font-size: 22px;
+}
+
+.brand-text {
+  margin-left: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.password-body {
+  flex: 1;
   display: flex;
   justify-content: center;
-  padding: 32px 16px;
+  align-items: flex-start;
+  padding: 60px 16px;
 }
 
 .password-card {
-  width: min(100%, 620px);
+  width: min(100%, 560px);
   height: fit-content;
+  border-radius: 10px;
 }
 
 h2 {

@@ -62,7 +62,7 @@
             <Expand v-else />
           </el-icon>
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item :to="{ path: '/dashboard' }">首页</el-breadcrumb-item>
+            <el-breadcrumb-item :to="{ path: '/portal' }">工作台</el-breadcrumb-item>
             <el-breadcrumb-item
               v-if="currentParent?.meta?.title"
               :to="{ path: parentCrumbPath }"
@@ -173,7 +173,7 @@ const currentParent = computed(() => {
 /** 面包屑中间项点击目标：父级分组的第一个可见子页面（如 /winter → /winter/association） */
 const parentCrumbPath = computed(() => {
   const parent = currentParent.value;
-  if (!parent) return '/dashboard';
+  if (!parent) return '/portal';
   const first = menuChildren(parent)[0];
   return first ? resolvePath(parent.path, first.path) : parent.path;
 });

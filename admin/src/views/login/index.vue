@@ -115,7 +115,7 @@ async function onSubmit() {
         router.replace('/account/change-password');
         return;
       }
-      const redirect = (route.query.redirect as string) || '/dashboard';
+      const redirect = (route.query.redirect as string) || '/portal';
       router.replace(redirect);
     } catch (e) {
       // 错误已在拦截器处理

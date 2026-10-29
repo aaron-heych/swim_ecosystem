@@ -3,8 +3,8 @@
     <div class="content">
       <div class="code">404</div>
       <p class="desc">抱歉，您访问的页面不存在</p>
-      <el-button type="primary" @click="$router.replace('/dashboard')">
-        返回首页
+      <el-button type="primary" @click="$router.replace('/portal')">
+        返回工作台
       </el-button>
     </div>
   </div>

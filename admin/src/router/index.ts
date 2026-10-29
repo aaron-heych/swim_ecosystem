@@ -11,23 +11,31 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: '登录', public: true },
   },
   {
+    path: '/portal',
+    name: 'Portal',
+    component: () => import('@/views/portal/index.vue'),
+    meta: { title: '工作台' },
+  },
+  {
+    // 旧版全局仪表盘链接兼容：统一跳到模块工作台
+    path: '/dashboard',
+    redirect: '/portal',
+  },
+  {
     path: '/',
-    component: Layout,
-    redirect: '/dashboard',
-    children: [
-      {
-        path: 'dashboard',
-        name: 'Dashboard',
-        component: () => import('@/views/dashboard/index.vue'),
-        meta: { title: '仪表盘', icon: 'Odometer' },
-      },
-    ],
+    redirect: '/portal',
   },
   {
     path: '/user',
     component: Layout,
     meta: { title: '用户管理', icon: 'User', roles: ['super_admin', 'operator', 'auditor'] },
     children: [
+      {
+        path: 'dashboard',
+        name: 'UserDashboard',
+        component: () => import('@/views/user/dashboard.vue'),
+        meta: { title: '概览' },
+      },
       {
         path: 'list',
         name: 'UserList',
@@ -41,6 +49,12 @@ export const routes: RouteRecordRaw[] = [
     component: Layout,
     meta: { title: '权限管理', icon: 'Lock', roles: ['super_admin'] },
     children: [
+      {
+        path: 'dashboard',
+        name: 'RbacDashboard',
+        component: () => import('@/views/rbac/dashboard.vue'),
+        meta: { title: '概览' },
+      },
       {
         path: 'admin',
         name: 'RbacAdmin',
@@ -66,6 +80,12 @@ export const routes: RouteRecordRaw[] = [
     component: Layout,
     meta: { title: '冬泳管理', icon: 'Flag', roles: ['super_admin', 'swimming_admin', 'swimming_sub_admin'] },
     children: [
+      {
+        path: 'dashboard',
+        name: 'WinterDashboard',
+        component: () => import('@/views/winter/dashboard.vue'),
+        meta: { title: '概览', roles: ['super_admin', 'swimming_admin', 'swimming_sub_admin'] },
+      },
       {
         path: 'association',
         name: 'WinterAssociation',
@@ -110,6 +130,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: '场馆管理', icon: 'House', roles: ['super_admin', 'operator', 'auditor'] },
     children: [
       {
+        path: 'dashboard',
+        name: 'VenueDashboard',
+        component: () => import('@/views/venue/dashboard.vue'),
+        meta: { title: '概览' },
+      },
+      {
         path: 'list',
         name: 'VenueList',
         component: () => import('@/views/venue/list.vue'),
@@ -122,6 +148,12 @@ export const routes: RouteRecordRaw[] = [
     component: Layout,
     meta: { title: '教练管理', icon: 'Avatar', roles: ['super_admin', 'operator', 'auditor'] },
     children: [
+      {
+        path: 'dashboard',
+        name: 'CoachDashboard',
+        component: () => import('@/views/coach/dashboard.vue'),
+        meta: { title: '概览' },
+      },
       {
         path: 'list',
         name: 'CoachList',
@@ -141,6 +173,12 @@ export const routes: RouteRecordRaw[] = [
     component: Layout,
     meta: { title: '赛事管理', icon: 'Trophy', roles: ['super_admin', 'operator', 'auditor'] },
     children: [
+      {
+        path: 'dashboard',
+        name: 'EventDashboard',
+        component: () => import('@/views/event/dashboard.vue'),
+        meta: { title: '概览' },
+      },
       {
         path: 'list',
         name: 'EventList',
@@ -173,6 +211,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: '游泳圈子', icon: 'ChatDotRound', roles: ['super_admin', 'operator', 'auditor'] },
     children: [
       {
+        path: 'dashboard',
+        name: 'CircleDashboard',
+        component: () => import('@/views/circle/dashboard.vue'),
+        meta: { title: '概览' },
+      },
+      {
         path: 'post',
         name: 'CirclePost',
         component: () => import('@/views/circle/post.vue'),
@@ -198,6 +242,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: '消息通知', icon: 'Bell', roles: ['super_admin', 'operator'] },
     children: [
       {
+        path: 'dashboard',
+        name: 'NotificationDashboard',
+        component: () => import('@/views/notification/dashboard.vue'),
+        meta: { title: '概览' },
+      },
+      {
         path: 'template',
         name: 'NotificationTemplate',
         component: () => import('@/views/notification/template.vue'),
@@ -216,6 +266,12 @@ export const routes: RouteRecordRaw[] = [
     component: Layout,
     meta: { title: '系统设置', icon: 'Setting', roles: ['super_admin', 'operator'] },
     children: [
+      {
+        path: 'dashboard',
+        name: 'SystemDashboard',
+        component: () => import('@/views/system/dashboard.vue'),
+        meta: { title: '概览' },
+      },
       {
         path: 'operation-log',
         name: 'SystemOperationLog',
@@ -255,16 +311,10 @@ export const routes: RouteRecordRaw[] = [
     ],
   },
   {
-    path: '/account',
-    component: Layout,
-    children: [
-      {
-        path: 'change-password',
-        name: 'AdminChangePassword',
-        component: () => import('@/views/account/change-password.vue'),
-        meta: { title: '修改密码', hidden: true },
-      },
-    ],
+    path: '/account/change-password',
+    name: 'AdminChangePassword',
+    component: () => import('@/views/account/change-password.vue'),
+    meta: { title: '修改密码' },
   },
   {
     path: '/:pathMatch(.*)*',

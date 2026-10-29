@@ -296,7 +296,7 @@ async function toggleStatus(region: RegionItem) {
 
 onMounted(() => {
   if (!isSuperAdmin.value) {
-    router.replace('/dashboard');
+    router.replace('/portal');
     return;
   }
   loadRegions();
